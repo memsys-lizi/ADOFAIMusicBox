@@ -12,13 +12,24 @@
   "app": {
     "windows": [
       {
-        "title": "adofaimusicbox",
-        "width": 800,
-        "height": 600
+        "title": "ADOFAI Music Box",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 980,
+        "minHeight": 680
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "**/*"
+          ],
+          "requireLiteralLeadingDot": false
+        }
+      }
     }
   },
   "bundle": {
