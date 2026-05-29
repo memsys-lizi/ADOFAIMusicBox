@@ -13,10 +13,10 @@ import {
   Volume2,
   Waves,
 } from "lucide-react";
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration } from "../../lib/format";
-import type { PlaybackMode, TrackSummary } from "../../types/domain";
+import type { PlaybackMode, PlayerOpenSourceRect, TrackSummary } from "../../types/domain";
 
 interface MiniPlayerProps {
   track: TrackSummary | null;
@@ -30,7 +30,8 @@ interface MiniPlayerProps {
   hitSoundsEnabled: boolean;
   playSoundsEnabled: boolean;
   isFavorite: boolean;
-  onOpenPlayer: () => void;
+  isPlayerOpen: boolean;
+  onOpenPlayer: (sourceRect?: PlayerOpenSourceRect) => void;
   onPlayPause: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -56,6 +57,7 @@ export function MiniPlayer({
   hitSoundsEnabled,
   playSoundsEnabled,
   isFavorite,
+  isPlayerOpen,
   onOpenPlayer,
   onPlayPause,
   onPrevious,
@@ -70,19 +72,35 @@ export function MiniPlayer({
   onToggleFavorite,
 }: MiniPlayerProps) {
   const [mixOpen, setMixOpen] = useState(false);
+  const coverRef = useRef<HTMLButtonElement>(null);
   const safeDuration = Math.max(0, duration);
   const seekMax = Math.max(1, safeDuration);
   const progressStyle = {
     "--progress": `${Math.min(100, Math.max(0, (currentTime / seekMax) * 100))}%`,
   } as CSSProperties;
+  const artworkTransitionStyle = !isPlayerOpen
+    ? ({ viewTransitionName: "player-artwork" } as CSSProperties)
+    : undefined;
+
+  function handleOpenPlayer() {
+    const rect = coverRef.current?.getBoundingClientRect();
+    onOpenPlayer(rect ? rectToSource(rect) : undefined);
+  }
 
   return (
     <footer className="mini-player">
       <div className="mini-track">
-        <button className="mini-cover" type="button" onClick={onOpenPlayer} title="打开播放页">
+        <button
+          ref={coverRef}
+          className="mini-cover"
+          type="button"
+          onClick={handleOpenPlayer}
+          title="打开播放页"
+          style={artworkTransitionStyle}
+        >
           <EmptyArtwork title={track?.title ?? "默认封面"} imagePath={track?.coverPath} size="sm" />
         </button>
-        <button className="mini-title" type="button" onClick={onOpenPlayer}>
+        <button className="mini-title" type="button" onClick={handleOpenPlayer}>
           <strong>{track?.title ?? "还没有播放音乐"}</strong>
           <small>{track ? track.artist : "添加本地谱面后开始播放"}</small>
         </button>
@@ -161,6 +179,15 @@ export function MiniPlayer({
       )}
     </footer>
   );
+}
+
+function rectToSource(rect: DOMRect): PlayerOpenSourceRect {
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 interface ToggleIconProps {

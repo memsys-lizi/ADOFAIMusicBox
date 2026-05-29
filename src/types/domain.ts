@@ -4,6 +4,13 @@ export type ParseStatus = "ok" | "lenient" | "warning" | "error";
 export type AppView = "local" | "favorites" | "recent";
 export type PlaybackMode = "sequence" | "repeatAll" | "repeatOne" | "shuffle";
 
+export interface PlayerOpenSourceRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface LibrarySettings {
   folders: string[];
   theme: ThemeMode;

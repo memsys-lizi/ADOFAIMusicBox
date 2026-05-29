@@ -16,12 +16,18 @@ import {
   Waves,
   X,
 } from "lucide-react";
-import type { CSSProperties, MouseEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import turntablePlayer from "../../assets/turntable-player.png";
 import { toAssetUrl } from "../../lib/assets";
 import { formatCount, formatDuration, formatFileSize } from "../../lib/format";
 import { runWindowAction, startWindowDrag } from "../../lib/window";
 import { useCoverPalette } from "../../hooks/useCoverPalette";
-import type { AudioTimeline, PlaybackMode, TrackSummary } from "../../types/domain";
+import type {
+  AudioTimeline,
+  PlaybackMode,
+  PlayerOpenSourceRect,
+  TrackSummary,
+} from "../../types/domain";
 
 interface FullPlayerOverlayProps {
   track: TrackSummary | null;
@@ -32,6 +38,8 @@ interface FullPlayerOverlayProps {
   musicVolume: number;
   playbackMode: PlaybackMode;
   isFavorite: boolean;
+  closing: boolean;
+  openSourceRect: PlayerOpenSourceRect | null;
   onClose: () => void;
   onPlayPause: () => void;
   onPrevious: () => void;
@@ -51,6 +59,8 @@ export function FullPlayerOverlay({
   musicVolume,
   playbackMode,
   isFavorite,
+  closing,
+  openSourceRect,
   onClose,
   onPlayPause,
   onPrevious,
@@ -60,6 +70,9 @@ export function FullPlayerOverlay({
   onCyclePlaybackMode,
   onToggleFavorite,
 }: FullPlayerOverlayProps) {
+  const turntableRef = useRef<HTMLDivElement>(null);
+  const [isOpening, setIsOpening] = useState(false);
+  const [entryStyle, setEntryStyle] = useState<CSSProperties | undefined>();
   const palette = useCoverPalette(track?.coverPath);
   const cover = toAssetUrl(track?.coverPath);
   const safeDuration = duration || timeline?.duration || track?.duration || 0;
@@ -89,6 +102,32 @@ export function FullPlayerOverlay({
     "--player-bg-b": palette.backgroundB,
     "--player-soft": palette.soft,
   } as CSSProperties;
+  const artworkTransitionStyle = { viewTransitionName: "player-artwork" } as CSSProperties;
+
+  useLayoutEffect(() => {
+    if (!openSourceRect || closing || !turntableRef.current) {
+      setIsOpening(false);
+      setEntryStyle(undefined);
+      return;
+    }
+
+    const target = turntableRef.current.getBoundingClientRect();
+    const sourceCenterX = openSourceRect.left + openSourceRect.width / 2;
+    const sourceCenterY = openSourceRect.top + openSourceRect.height / 2;
+    const targetCenterX = target.left + target.width / 2;
+    const targetCenterY = target.top + target.height / 2;
+    const scale = Math.max(0.14, Math.min(0.24, openSourceRect.width / Math.max(1, target.width)));
+
+    setEntryStyle({
+      "--open-x": `${sourceCenterX - targetCenterX}px`,
+      "--open-y": `${sourceCenterY - targetCenterY}px`,
+      "--open-scale": `${scale}`,
+    } as CSSProperties);
+    setIsOpening(true);
+
+    const frame = requestAnimationFrame(() => setIsOpening(false));
+    return () => cancelAnimationFrame(frame);
+  }, [closing, openSourceRect, track?.id]);
 
   function handleTopbarMouseDown(event: MouseEvent<HTMLElement>) {
     if (event.button !== 0 || shouldSkipWindowDrag(event.target)) {
@@ -106,7 +145,7 @@ export function FullPlayerOverlay({
   }
 
   return (
-    <section className="player-overlay" style={style}>
+    <section className={closing ? "player-overlay closing" : "player-overlay"} style={style}>
       <header
         className="player-topbar"
         onMouseDown={handleTopbarMouseDown}
@@ -130,16 +169,17 @@ export function FullPlayerOverlay({
       </header>
 
       <div className="player-stage">
-        <div className="turntable-card">
-          <div className={isPlaying ? "vinyl spinning" : "vinyl"}>
-            <div className="vinyl-rings" />
-            <div className="vinyl-label">
-              {cover ? <img src={cover} alt={`${track?.title ?? "音乐"} 封面`} /> : <Disc3 aria-hidden="true" />}
-            </div>
-          </div>
-          <div className="tonearm">
-            <span />
-            <b />
+        <div
+          ref={turntableRef}
+          className={isOpening ? "turntable-card opening" : "turntable-card"}
+          style={entryStyle}
+        >
+          <img className="turntable-image" src={turntablePlayer} alt="" aria-hidden="true" />
+          <div
+            className={isPlaying ? "turntable-artwork spinning" : "turntable-artwork"}
+            style={artworkTransitionStyle}
+          >
+            {cover ? <img src={cover} alt={`${track?.title ?? "音乐"} 封面`} /> : <Disc3 aria-hidden="true" />}
           </div>
         </div>
 

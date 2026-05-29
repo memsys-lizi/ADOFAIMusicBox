@@ -162,11 +162,13 @@
   outline: 0;
   transition:
     background 150ms ease,
-    box-shadow 150ms ease;
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .track-row:hover {
   background: #f6f6f6;
+  transform: translateX(2px);
 }
 
 .track-row.selected {
@@ -265,6 +267,13 @@
   display: grid;
   gap: 10px;
   min-width: 0;
+  transition:
+    opacity 160ms ease,
+    transform 180ms ease;
+}
+
+.track-card:hover {
+  transform: translateY(-2px);
 }
 
 .track-card.selected .artwork {
@@ -277,6 +286,16 @@
   padding: 0;
   border-radius: 10px;
   background: transparent;
+}
+
+.cover-play .artwork {
+  transition:
+    box-shadow 180ms ease,
+    transform 220ms ease;
+}
+
+.cover-play:hover .artwork {
+  transform: scale(1.018);
 }
 
 .cover-play span {

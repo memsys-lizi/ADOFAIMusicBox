@@ -26,6 +26,7 @@ import type {
   AppView,
   AudioTimeline,
   LibrarySettings,
+  PlayerOpenSourceRect,
   PlaybackMode,
   TrackSummary,
 } from "./types/domain";
@@ -42,6 +43,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [folderManagerOpen, setFolderManagerOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [playerClosing, setPlayerClosing] = useState(false);
+  const [playerOpenSource, setPlayerOpenSource] = useState<PlayerOpenSourceRect | null>(null);
   const [playbackView, setPlaybackView] = useState<AppView>("local");
   const [locateRequest, setLocateRequest] = useState(0);
 
@@ -326,6 +329,34 @@ function App() {
     setLocateRequest((request) => request + 1);
   }
 
+  function handleOpenPlayer(sourceRect?: PlayerOpenSourceRect) {
+    const showPlayer = () => {
+      setPlayerOpenSource(sourceRect ?? null);
+      setPlayerClosing(false);
+      setPlayerOpen(true);
+    };
+
+    const transitionDocument = document as Document & {
+      startViewTransition?: (callback: () => void) => void;
+    };
+
+    if (!playerOpen && transitionDocument.startViewTransition) {
+      transitionDocument.startViewTransition(showPlayer);
+      return;
+    }
+
+    showPlayer();
+  }
+
+  function handleClosePlayer() {
+    setPlayerClosing(true);
+    window.setTimeout(() => {
+      setPlayerOpen(false);
+      setPlayerClosing(false);
+      setPlayerOpenSource(null);
+    }, 240);
+  }
+
   return (
     <>
       <AppShell
@@ -383,7 +414,8 @@ function App() {
         hitSoundsEnabled={audio.hitSoundsEnabled}
         playSoundsEnabled={audio.playSoundsEnabled}
         isFavorite={selectedIsFavorite}
-        onOpenPlayer={() => setPlayerOpen(true)}
+        isPlayerOpen={playerOpen && !playerClosing}
+        onOpenPlayer={handleOpenPlayer}
         onPlayPause={handlePlayPause}
         onPrevious={handlePreviousTrack}
         onNext={handleNextTrack}
@@ -407,7 +439,9 @@ function App() {
           musicVolume={settings?.musicVolume ?? 1}
           playbackMode={settings?.playbackMode ?? "sequence"}
           isFavorite={selectedIsFavorite}
-          onClose={() => setPlayerOpen(false)}
+          closing={playerClosing}
+          openSourceRect={playerOpenSource}
+          onClose={handleClosePlayer}
           onPlayPause={handlePlayPause}
           onPrevious={handlePreviousTrack}
           onNext={handleNextTrack}

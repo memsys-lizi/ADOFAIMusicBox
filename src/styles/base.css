@@ -184,6 +184,7 @@ input[type="range"] {
 .round-button:hover,
 .heart-button:hover {
   background: #ececec;
+  transform: translateY(-1px);
 }
 
 .plain-icon.active,
@@ -216,11 +217,13 @@ input[type="range"] {
   background: #ebebeb;
   transition:
     background 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 160ms ease;
 }
 
 .pill-button:hover {
   background: #e0e0e0;
+  transform: translateY(-1px);
 }
 
 .pill-button.main {
