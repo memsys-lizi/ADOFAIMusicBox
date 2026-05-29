@@ -16,6 +16,8 @@ impl AppState {
         let tracks = scan_sources(
             &settings.folders,
             &settings.adofai_files,
+            &settings.hidden_track_ids,
+            &settings.hidden_tracks,
             settings.lenient_parsing,
         );
         Self {
@@ -112,6 +114,8 @@ pub fn scan_library(state: tauri::State<'_, AppState>) -> Result<Vec<TrackSummar
     let tracks = scan_sources(
         &settings.folders,
         &settings.adofai_files,
+        &settings.hidden_track_ids,
+        &settings.hidden_tracks,
         settings.lenient_parsing,
     );
     let mut stored = state

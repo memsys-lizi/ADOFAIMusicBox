@@ -1,4 +1,4 @@
-use super::models::{ParseStatus, ResourceStatus, TrackDetail, TrackSummary};
+use super::models::{HiddenTrack, ParseStatus, ResourceStatus, TrackDetail, TrackSummary};
 use super::parser::{
     array_at, clean_display_text, event_type, number_setting, parse_level_file, resolve_sibling,
     settings_map, string_setting,
@@ -17,6 +17,8 @@ const VIDEO_EXTENSIONS: &[&str] = &["mp4", "webm", "mov", "mkv"];
 pub fn scan_sources(
     folders: &[String],
     adofai_files: &[String],
+    hidden_track_ids: &[String],
+    hidden_tracks: &[HiddenTrack],
     lenient: bool,
 ) -> Vec<TrackSummary> {
     let mut tracks = Vec::new();
@@ -47,6 +49,20 @@ pub fn scan_sources(
         if path.exists() && is_adofai(path) && !is_backup_or_hidden(path) {
             push_track_once(&mut tracks, &mut seen, path, lenient);
         }
+    }
+
+    if !hidden_track_ids.is_empty() || !hidden_tracks.is_empty() {
+        let mut hidden_ids: HashSet<&str> = hidden_track_ids.iter().map(String::as_str).collect();
+        hidden_ids.extend(hidden_tracks.iter().map(|track| track.id.as_str()));
+        let hidden_paths: HashSet<String> = hidden_tracks
+            .iter()
+            .filter(|track| !track.adofai_path.is_empty())
+            .map(|track| normalize_path_key(&track.adofai_path))
+            .collect();
+        tracks.retain(|track| {
+            !hidden_ids.contains(track.id.as_str())
+                && !hidden_paths.contains(&normalize_path_key(&track.adofai_path))
+        });
     }
 
     tracks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
@@ -373,4 +389,11 @@ fn find_first_named_image(folder: Option<&Path>, names: &[&str]) -> Option<PathB
 
 fn path_string(path: Option<PathBuf>) -> Option<String> {
     path.map(|path| path.to_string_lossy().to_string())
+}
+
+fn normalize_path_key(path: &str) -> String {
+    path.trim()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_lowercase()
 }

@@ -1,36 +1,41 @@
-import { FileMusic, FolderPlus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { FileMusic, FolderPlus, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { HiddenTrack } from "../types/domain";
 
 interface FolderManagerProps {
   open: boolean;
   folders: string[];
   files: string[];
+  hiddenTracks: HiddenTrack[];
   isScanning: boolean;
   onClose: () => void;
   onAddFolder: () => void;
   onAddFile: () => void;
   onRemoveFolder: (folder: string) => void;
   onRemoveFile: (file: string) => void;
+  onRestoreHiddenTrack: (track: HiddenTrack) => void;
   onScan: () => void;
 }
 
-type SourceTab = "folders" | "files";
+type SourceTab = "folders" | "files" | "removed";
 
 export function FolderManager({
   open,
   folders,
   files,
+  hiddenTracks,
   isScanning,
   onClose,
   onAddFolder,
   onAddFile,
   onRemoveFolder,
   onRemoveFile,
+  onRestoreHiddenTrack,
   onScan,
 }: FolderManagerProps) {
   const [activeTab, setActiveTab] = useState<SourceTab>("folders");
   const [query, setQuery] = useState("");
-  const activeSources = activeTab === "folders" ? folders : files;
+  const activeSources = activeTab === "folders" ? folders : activeTab === "files" ? files : [];
   const filteredSources = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {
@@ -38,6 +43,18 @@ export function FolderManager({
     }
     return activeSources.filter((source) => source.toLowerCase().includes(normalized));
   }, [activeSources, query]);
+  const filteredHiddenTracks = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return hiddenTracks;
+    }
+    return hiddenTracks.filter((track) =>
+      [track.title, track.artist, track.author, track.adofaiPath, track.folderPath]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized),
+    );
+  }, [hiddenTracks, query]);
 
   if (!open) {
     return null;
@@ -85,6 +102,13 @@ export function FolderManager({
           >
             单曲 <span>{files.length}</span>
           </button>
+          <button
+            className={activeTab === "removed" ? "active" : ""}
+            type="button"
+            onClick={() => setActiveTab("removed")}
+          >
+            已移除 <span>{hiddenTracks.length}</span>
+          </button>
         </div>
 
         <label className="source-search">
@@ -92,12 +116,34 @@ export function FolderManager({
           <input
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder={activeTab === "folders" ? "搜索文件夹" : "搜索单曲"}
+            placeholder={searchPlaceholder(activeTab)}
           />
         </label>
 
         <div className="folder-list source-scroll">
-          {filteredSources.length === 0 ? (
+          {activeTab === "removed" ? (
+            filteredHiddenTracks.length === 0 ? (
+              <div className="folder-empty">{emptyText(activeTab, query)}</div>
+            ) : (
+              filteredHiddenTracks.map((track) => (
+                <div className="folder-row source-row" key={`${track.id}-${track.adofaiPath}`}>
+                  <span title={track.adofaiPath || track.id}>
+                    <strong>{track.title}</strong>
+                    <small>{track.artist}</small>
+                    <small>{track.adofaiPath || track.id}</small>
+                  </span>
+                  <button
+                    className="restore-source-button"
+                    type="button"
+                    onClick={() => onRestoreHiddenTrack(track)}
+                    title="恢复"
+                  >
+                    <RotateCcw aria-hidden="true" />
+                  </button>
+                </div>
+              ))
+            )
+          ) : filteredSources.length === 0 ? (
             <div className="folder-empty">{emptyText(activeTab, query)}</div>
           ) : (
             filteredSources.map((source) => (
@@ -137,5 +183,21 @@ function emptyText(activeTab: SourceTab, query: string) {
   if (query.trim()) {
     return "没有匹配的来源。";
   }
-  return activeTab === "folders" ? "还没有添加文件夹。" : "还没有添加单曲。";
+  if (activeTab === "folders") {
+    return "还没有添加文件夹。";
+  }
+  if (activeTab === "files") {
+    return "还没有添加单曲。";
+  }
+  return "还没有移除过曲目。";
+}
+
+function searchPlaceholder(activeTab: SourceTab) {
+  if (activeTab === "folders") {
+    return "搜索文件夹";
+  }
+  if (activeTab === "files") {
+    return "搜索单曲";
+  }
+  return "搜索已移除曲目";
 }

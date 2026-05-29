@@ -19,9 +19,11 @@ const browserPreviewSettings: LibrarySettings = {
   lenientParsing: true,
   favoriteTrackIds: [],
   recentTrackIds: [],
+  hiddenTrackIds: [],
+  hiddenTracks: [],
 };
 
-function hasTauriBridge() {
+export function hasTauriBridge() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 

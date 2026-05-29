@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FileMusic,
+  FolderOpen,
   FolderPlus,
   Grid2X2,
   Heart,
@@ -11,8 +12,9 @@ import {
   MoreHorizontal,
   Play,
   Plus,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration, formatFileSize } from "../../lib/format";
 import type { AppView, TrackSummary } from "../../types/domain";
@@ -34,6 +36,9 @@ interface LibraryViewProps {
   onLocatePlaying: () => void;
   onPlayAll: () => void;
   onToggleFavorite: (track: TrackSummary) => void;
+  onOpenTrackFolder: (track: TrackSummary) => void;
+  onShowTrackFile: (track: TrackSummary) => void;
+  onRemoveTrack: (track: TrackSummary) => void;
   onAddFolder: () => void;
   onAddFile: () => void;
   onOpenFolderManager: () => void;
@@ -67,6 +72,9 @@ export function LibraryView({
   onLocatePlaying,
   onPlayAll,
   onToggleFavorite,
+  onOpenTrackFolder,
+  onShowTrackFile,
+  onRemoveTrack,
   onAddFolder,
   onAddFile,
   onOpenFolderManager,
@@ -77,6 +85,11 @@ export function LibraryView({
   const [menuOpen, setMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [trackMenu, setTrackMenu] = useState<{
+    x: number;
+    y: number;
+    track: TrackSummary;
+  } | null>(null);
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
 
   const shownTracks = useMemo(() => {
@@ -110,12 +123,48 @@ export function LibraryView({
     return () => window.clearTimeout(timer);
   }, [locateRequest]);
 
+  useEffect(() => {
+    if (!trackMenu) {
+      return;
+    }
+    const close = () => setTrackMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("blur", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [trackMenu]);
+
   function setTrackRef(trackId: string, node: HTMLDivElement | null) {
     if (node) {
       itemRefs.current.set(trackId, node);
     } else {
       itemRefs.current.delete(trackId);
     }
+  }
+
+  function openTrackMenu(event: MouseEvent<HTMLElement>, track: TrackSummary) {
+    event.preventDefault();
+    setMenuOpen(false);
+    setAddMenuOpen(false);
+    setSortOpen(false);
+    const menuWidth = 184;
+    const menuHeight = 138;
+    setTrackMenu({
+      x: Math.min(event.clientX, window.innerWidth - menuWidth - 10),
+      y: Math.min(event.clientY, window.innerHeight - menuHeight - 10),
+      track,
+    });
   }
 
   return (
@@ -299,6 +348,7 @@ export function LibraryView({
               trackRef={(node) => setTrackRef(track.id, node)}
               onPlayTrack={onPlayTrack}
               onToggleFavorite={onToggleFavorite}
+              onContextMenu={openTrackMenu}
             />
           ))}
         </div>
@@ -313,8 +363,50 @@ export function LibraryView({
               trackRef={(node) => setTrackRef(track.id, node)}
               onPlayTrack={onPlayTrack}
               onToggleFavorite={onToggleFavorite}
+              onContextMenu={openTrackMenu}
             />
           ))}
+        </div>
+      )}
+
+      {trackMenu && (
+        <div
+          className="track-context-menu"
+          style={{ left: trackMenu.x, top: trackMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onOpenTrackFolder(trackMenu.track);
+              setTrackMenu(null);
+            }}
+          >
+            <FolderOpen aria-hidden="true" />
+            打开所在文件夹
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onShowTrackFile(trackMenu.track);
+              setTrackMenu(null);
+            }}
+          >
+            <FileMusic aria-hidden="true" />
+            显示谱面文件
+          </button>
+          <span className="context-divider" aria-hidden="true" />
+          <button
+            className="danger"
+            type="button"
+            onClick={() => {
+              onRemoveTrack(trackMenu.track);
+              setTrackMenu(null);
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+            从曲库移除
+          </button>
         </div>
       )}
 
@@ -339,9 +431,18 @@ interface TrackItemProps {
   trackRef: (node: HTMLDivElement | null) => void;
   onPlayTrack: (track: TrackSummary) => void;
   onToggleFavorite: (track: TrackSummary) => void;
+  onContextMenu: (event: MouseEvent<HTMLElement>, track: TrackSummary) => void;
 }
 
-function TrackRow({ track, selected, favorite, trackRef, onPlayTrack, onToggleFavorite }: TrackItemProps) {
+function TrackRow({
+  track,
+  selected,
+  favorite,
+  trackRef,
+  onPlayTrack,
+  onToggleFavorite,
+  onContextMenu,
+}: TrackItemProps) {
   return (
     <div
       ref={trackRef}
@@ -349,6 +450,7 @@ function TrackRow({ track, selected, favorite, trackRef, onPlayTrack, onToggleFa
       role="button"
       tabIndex={0}
       onClick={() => onPlayTrack(track)}
+      onContextMenu={(event) => onContextMenu(event, track)}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           onPlayTrack(track);
@@ -383,9 +485,21 @@ function TrackRow({ track, selected, favorite, trackRef, onPlayTrack, onToggleFa
   );
 }
 
-function TrackCard({ track, selected, favorite, trackRef, onPlayTrack, onToggleFavorite }: TrackItemProps) {
+function TrackCard({
+  track,
+  selected,
+  favorite,
+  trackRef,
+  onPlayTrack,
+  onToggleFavorite,
+  onContextMenu,
+}: TrackItemProps) {
   return (
-    <div ref={trackRef} className={selected ? "track-card selected" : "track-card"}>
+    <div
+      ref={trackRef}
+      className={selected ? "track-card selected" : "track-card"}
+      onContextMenu={(event) => onContextMenu(event, track)}
+    >
       <button className="cover-play" type="button" onClick={() => onPlayTrack(track)}>
         <EmptyArtwork title={track.title} imagePath={track.coverPath} size="md" />
         <span>

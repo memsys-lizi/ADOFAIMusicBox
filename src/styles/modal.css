@@ -186,6 +186,11 @@
   background: #ececec;
 }
 
+.folder-row .restore-source-button:hover {
+  color: var(--active-dark);
+  background: color-mix(in srgb, var(--active) 12%, #ececec);
+}
+
 .folder-row svg {
   width: 17px;
   height: 17px;

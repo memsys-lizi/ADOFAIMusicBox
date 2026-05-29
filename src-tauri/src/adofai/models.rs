@@ -3,6 +3,25 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HiddenTrack {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub artist: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub adofai_path: String,
+    #[serde(default)]
+    pub folder_path: String,
+    #[serde(default)]
+    pub removed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LibrarySettings {
     pub folders: Vec<String>,
     #[serde(default)]
@@ -21,6 +40,10 @@ pub struct LibrarySettings {
     pub favorite_track_ids: Vec<String>,
     #[serde(default)]
     pub recent_track_ids: Vec<String>,
+    #[serde(default)]
+    pub hidden_track_ids: Vec<String>,
+    #[serde(default)]
+    pub hidden_tracks: Vec<HiddenTrack>,
 }
 
 impl Default for LibrarySettings {
@@ -38,6 +61,8 @@ impl Default for LibrarySettings {
             lenient_parsing: true,
             favorite_track_ids: Vec::new(),
             recent_track_ids: Vec::new(),
+            hidden_track_ids: Vec::new(),
+            hidden_tracks: Vec::new(),
         }
     }
 }

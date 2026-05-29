@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import "./styles/tokens.css";
@@ -19,6 +20,7 @@ import {
   addLibraryFolder,
   buildAudioTimeline,
   getSettings,
+  hasTauriBridge,
   listTracks,
   saveSettings,
   scanLibrary,
@@ -26,6 +28,7 @@ import {
 import type {
   AppView,
   AudioTimeline,
+  HiddenTrack,
   LibrarySettings,
   PlayerOpenSourceRect,
   PlaybackMode,
@@ -89,6 +92,12 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = "light";
+  }, []);
+
+  useEffect(() => {
+    const preventNativeMenu = (event: MouseEvent) => event.preventDefault();
+    window.addEventListener("contextmenu", preventNativeMenu);
+    return () => window.removeEventListener("contextmenu", preventNativeMenu);
   }, []);
 
   useEffect(() => {
@@ -188,17 +197,124 @@ function App() {
       ...settings,
       folders: settings.folders.filter((item) => item !== folder),
     });
+    removeVisibleTracks(
+      (track) =>
+        pathIsInside(track.adofaiPath, folder) &&
+        !next.adofaiFiles.some((file) => samePath(file, track.adofaiPath)),
+    );
     await persistSettings(next);
-    await refreshLibrary();
   }
 
   async function handleRemoveFile(file: string) {
     if (!settings) {
       return;
     }
+    const sourceTrack = tracks.find((track) => samePath(track.adofaiPath, file));
+    const shouldHide = settings.folders.some((folder) => pathIsInside(file, folder));
+    const hidden = shouldHide
+      ? sourceTrack
+        ? addHiddenTrack(settings, sourceTrack)
+        : addHiddenTrackRecord(settings, hiddenTrackFromPath(file))
+      : {
+          hiddenTrackIds: settings.hiddenTrackIds,
+          hiddenTracks: settings.hiddenTracks,
+        };
     const next = normalizeSettings({
       ...settings,
       adofaiFiles: settings.adofaiFiles.filter((item) => item !== file),
+      favoriteTrackIds: sourceTrack
+        ? settings.favoriteTrackIds.filter((id) => id !== sourceTrack.id)
+        : settings.favoriteTrackIds,
+      recentTrackIds: sourceTrack
+        ? settings.recentTrackIds.filter((id) => id !== sourceTrack.id)
+        : settings.recentTrackIds,
+      hiddenTrackIds: hidden.hiddenTrackIds,
+      hiddenTracks: hidden.hiddenTracks,
+    });
+    removeVisibleTracks((track) => samePath(track.adofaiPath, file));
+    await persistSettings(next);
+  }
+
+  async function handleOpenTrackFolder(track: TrackSummary) {
+    await revealLocalPath(track.audioPath ?? track.adofaiPath);
+  }
+
+  async function handleShowTrackFile(track: TrackSummary) {
+    if (!track.adofaiPath) {
+      return;
+    }
+    if (!hasTauriBridge()) {
+      setError("请在桌面应用中打开本地文件。");
+      return;
+    }
+    try {
+      await revealItemInDir(track.adofaiPath);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function revealLocalPath(path: string | null | undefined) {
+    if (!path) {
+      return;
+    }
+    if (!hasTauriBridge()) {
+      setError("请在桌面应用中打开本地文件。");
+      return;
+    }
+    try {
+      await revealItemInDir(path);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleRemoveTrack(track: TrackSummary) {
+    if (!settings) {
+      return;
+    }
+
+    const isSingleFileSource = settings.adofaiFiles.some((file) => samePath(file, track.adofaiPath));
+    const isFolderSource = settings.folders.some((folder) => pathIsInside(track.adofaiPath, folder));
+    const hidden = isFolderSource
+      ? addHiddenTrack(settings, track)
+      : {
+          hiddenTrackIds: settings.hiddenTrackIds,
+          hiddenTracks: settings.hiddenTracks,
+        };
+    const next = normalizeSettings({
+      ...settings,
+      adofaiFiles: isSingleFileSource
+        ? settings.adofaiFiles.filter((file) => !samePath(file, track.adofaiPath))
+        : settings.adofaiFiles,
+      favoriteTrackIds: settings.favoriteTrackIds.filter((id) => id !== track.id),
+      recentTrackIds: settings.recentTrackIds.filter((id) => id !== track.id),
+      hiddenTrackIds: hidden.hiddenTrackIds,
+      hiddenTracks: hidden.hiddenTracks,
+    });
+
+    const visibleTracks = tracks.filter((item) => item.id !== track.id);
+    setTracks(visibleTracks);
+    if (selectedTrack?.id === track.id) {
+      audio.pause();
+      setSelectedTrack(visibleTracks[0] ?? null);
+      setTimeline(null);
+      setLoadedTrackId(null);
+    }
+
+    await persistSettings(next);
+  }
+
+  async function handleRestoreHiddenTrack(track: HiddenTrack) {
+    if (!settings) {
+      return;
+    }
+    const next = normalizeSettings({
+      ...settings,
+      hiddenTrackIds: settings.hiddenTrackIds.filter((id) => id !== track.id),
+      hiddenTracks: settings.hiddenTracks.filter(
+        (item) => item.id !== track.id && !(track.adofaiPath && samePath(item.adofaiPath, track.adofaiPath)),
+      ),
     });
     await persistSettings(next);
     await refreshLibrary();
@@ -222,6 +338,33 @@ function App() {
     const next = normalizeSettings({ ...settings, ...patch });
     setSettings(next);
     void saveSettings(next).catch((err: unknown) => setError(errorMessage(err)));
+  }
+
+  function removeVisibleTracks(shouldRemove: (track: TrackSummary) => boolean) {
+    const nextTracks = tracks.filter((track) => !shouldRemove(track));
+    setTracks(nextTracks);
+    if (selectedTrack && shouldRemove(selectedTrack)) {
+      audio.pause();
+      setSelectedTrack(nextTracks[0] ?? null);
+      setTimeline(null);
+      setLoadedTrackId(null);
+    }
+  }
+
+  function addHiddenTrack(settings: LibrarySettings, track: TrackSummary) {
+    return addHiddenTrackRecord(settings, hiddenTrackFromSummary(track));
+  }
+
+  function addHiddenTrackRecord(settings: LibrarySettings, hiddenTrack: HiddenTrack) {
+    return {
+      hiddenTrackIds: Array.from(new Set([...settings.hiddenTrackIds, hiddenTrack.id])),
+      hiddenTracks: [
+        hiddenTrack,
+        ...settings.hiddenTracks.filter(
+          (item) => item.id !== hiddenTrack.id && !samePath(item.adofaiPath, hiddenTrack.adofaiPath),
+        ),
+      ],
+    };
   }
 
   function rememberRecent(trackId: string) {
@@ -431,6 +574,9 @@ function App() {
           onLocatePlaying={handleLocatePlaying}
           onPlayAll={handlePlayAll}
           onToggleFavorite={handleToggleFavorite}
+          onOpenTrackFolder={(track) => void handleOpenTrackFolder(track)}
+          onShowTrackFile={(track) => void handleShowTrackFile(track)}
+          onRemoveTrack={(track) => void handleRemoveTrack(track)}
           onAddFolder={() => void chooseAndAddFolder()}
           onAddFile={() => void chooseAndAddFile()}
           onOpenFolderManager={() => setFolderManagerOpen(true)}
@@ -488,12 +634,14 @@ function App() {
         open={folderManagerOpen}
         folders={settings?.folders ?? []}
         files={settings?.adofaiFiles ?? []}
+        hiddenTracks={settings?.hiddenTracks ?? []}
         isScanning={isScanning}
         onClose={() => setFolderManagerOpen(false)}
         onAddFolder={() => void chooseAndAddFolder()}
         onAddFile={() => void chooseAndAddFile()}
         onRemoveFolder={(folder) => void handleRemoveFolder(folder)}
         onRemoveFile={(file) => void handleRemoveFile(file)}
+        onRestoreHiddenTrack={(track) => void handleRestoreHiddenTrack(track)}
         onScan={() => void refreshLibrary()}
       />
     </>
@@ -519,6 +667,8 @@ function normalizeSettings(settings: LibrarySettings): LibrarySettings {
     playbackMode: settings.playbackMode ?? "sequence",
     favoriteTrackIds: Array.isArray(settings.favoriteTrackIds) ? settings.favoriteTrackIds : [],
     recentTrackIds: Array.isArray(settings.recentTrackIds) ? settings.recentTrackIds : [],
+    hiddenTrackIds: Array.isArray(settings.hiddenTrackIds) ? settings.hiddenTrackIds : [],
+    hiddenTracks: normalizeHiddenTracks(settings.hiddenTracks, settings.hiddenTrackIds),
   };
 }
 
@@ -582,6 +732,83 @@ function randomTrackIndex(currentIndex: number, length: number) {
     next = (next + 1) % length;
   }
   return next;
+}
+
+function hiddenTrackFromSummary(track: TrackSummary): HiddenTrack {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    author: track.author,
+    adofaiPath: track.adofaiPath,
+    folderPath: track.folderPath,
+    removedAt: new Date().toISOString(),
+  };
+}
+
+function hiddenTrackFromPath(path: string): HiddenTrack {
+  return {
+    id: `path:${normalizePathKey(path)}`,
+    title: fileStem(path),
+    artist: "未知艺术家",
+    author: "未知谱师",
+    adofaiPath: path,
+    folderPath: parentPath(path),
+    removedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeHiddenTracks(
+  hiddenTracks: LibrarySettings["hiddenTracks"] | undefined,
+  hiddenTrackIds: string[] | undefined,
+): HiddenTrack[] {
+  if (Array.isArray(hiddenTracks)) {
+    return hiddenTracks.map((track) => ({
+      id: track.id ?? "",
+      title: cleanDisplayText(track.title || "已移除曲目"),
+      artist: cleanDisplayText(track.artist || "未知艺术家"),
+      author: cleanDisplayText(track.author || "未知谱师"),
+      adofaiPath: track.adofaiPath ?? "",
+      folderPath: track.folderPath ?? "",
+      removedAt: track.removedAt ?? "",
+    }));
+  }
+  return Array.isArray(hiddenTrackIds)
+    ? hiddenTrackIds.map((id) => ({
+        id,
+        title: "已移除曲目",
+        artist: "未知艺术家",
+        author: "未知谱师",
+        adofaiPath: "",
+        folderPath: "",
+        removedAt: "",
+      }))
+    : [];
+}
+
+function samePath(left: string, right: string) {
+  return normalizePathKey(left) === normalizePathKey(right);
+}
+
+function pathIsInside(path: string, folder: string) {
+  const target = normalizePathKey(path);
+  const root = normalizePathKey(folder);
+  return target === root || target.startsWith(`${root}/`);
+}
+
+function normalizePathKey(path: string) {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function fileStem(path: string) {
+  const name = path.split(/[\\/]/).filter(Boolean).pop() ?? "已移除曲目";
+  return name.replace(/\.[^.]+$/, "") || name;
+}
+
+function parentPath(path: string) {
+  const parts = path.split(/[\\/]/);
+  parts.pop();
+  return parts.join("\\");
 }
 
 export default App;

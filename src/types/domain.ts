@@ -11,6 +11,16 @@ export interface PlayerOpenSourceRect {
   height: number;
 }
 
+export interface HiddenTrack {
+  id: string;
+  title: string;
+  artist: string;
+  author: string;
+  adofaiPath: string;
+  folderPath: string;
+  removedAt: string;
+}
+
 export interface LibrarySettings {
   folders: string[];
   adofaiFiles: string[];
@@ -24,6 +34,8 @@ export interface LibrarySettings {
   lenientParsing: boolean;
   favoriteTrackIds: string[];
   recentTrackIds: string[];
+  hiddenTrackIds: string[];
+  hiddenTracks: HiddenTrack[];
 }
 
 export interface TrackSummary {
