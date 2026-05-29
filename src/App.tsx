@@ -705,6 +705,8 @@ function normalizeTrack(track: TrackSummary): TrackSummary {
     title: cleanDisplayText(track.title),
     artist: cleanDisplayText(track.artist),
     author: cleanDisplayText(track.author),
+    videoOffsetSec: track.videoOffsetSec ?? 0,
+    loopVideo: Boolean(track.loopVideo),
   };
 }
 

@@ -53,6 +53,8 @@ export interface TrackSummary {
   audioFileSize?: number | null;
   videoPath?: string | null;
   hasVideo: boolean;
+  videoOffsetSec: number;
+  loopVideo: boolean;
   parseStatus: ParseStatus;
 }
 
@@ -86,6 +88,7 @@ export interface HitEvent {
 
 export interface AudioTimeline {
   songOffsetMs: number;
+  countdownLeadInSec: number;
   pitch: number;
   duration: number;
   hitEvents: HitEvent[];

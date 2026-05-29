@@ -1,10 +1,11 @@
 import {
   ChevronDown,
-  Disc3,
   Heart,
   ListMusic,
   Maximize2,
   Minimize,
+  PanelRightClose,
+  PanelRightOpen,
   Pause,
   Play,
   Repeat,
@@ -12,9 +13,19 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Video,
+  VideoOff,
   X,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
+import defaultCover from "../../assets/header.jpg";
 import turntablePlayer from "../../assets/turntable-player.png";
 import { toAssetUrl } from "../../lib/assets";
 import { formatCount, formatDuration, formatFileSize } from "../../lib/format";
@@ -69,12 +80,21 @@ export function FullPlayerOverlay({
   onToggleFavorite,
 }: FullPlayerOverlayProps) {
   const turntableRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isOpening, setIsOpening] = useState(false);
   const [entryStyle, setEntryStyle] = useState<CSSProperties | undefined>();
+  const [videoEnabled, setVideoEnabled] = useState(true);
+  const [videoInfoOpen, setVideoInfoOpen] = useState(false);
   const palette = useCoverPalette(track?.coverPath);
-  const cover = toAssetUrl(track?.coverPath);
+  const cover = toAssetUrl(track?.coverPath) ?? defaultCover;
+  const videoSource = toAssetUrl(track?.videoPath);
+  const hasVideo = Boolean(track?.hasVideo && videoSource);
+  const videoActive = Boolean(hasVideo && videoEnabled);
   const safeDuration = duration || timeline?.duration || track?.duration || 0;
   const seekMax = Math.max(1, safeDuration);
+  const progressStyle = {
+    "--progress": `${Math.min(100, Math.max(0, (currentTime / seekMax) * 100))}%`,
+  } as CSSProperties;
   const infoItems = [
     { label: "曲名", value: track?.title ?? "--" },
     { label: "作曲", value: track?.artist ?? "--", highlight: true },
@@ -127,6 +147,57 @@ export function FullPlayerOverlay({
     return () => cancelAnimationFrame(frame);
   }, [closing, openSourceRect, track?.id]);
 
+  useEffect(() => {
+    setVideoEnabled(true);
+    setVideoInfoOpen(false);
+  }, [track?.id]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    if (!videoActive || !videoSource) {
+      video.pause();
+      return;
+    }
+
+    const pitch = Math.max(0.05, timeline?.pitch ?? 1);
+    const songOffsetSec = (timeline?.songOffsetMs ?? 0) / 1000;
+    const rawTarget = currentTime * pitch - songOffsetSec + (track?.videoOffsetSec ?? 0);
+    const shouldPlayVideo = rawTarget >= 0;
+    let targetTime = Math.max(0, rawTarget);
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      targetTime = track?.loopVideo ? targetTime % video.duration : Math.min(targetTime, video.duration);
+    }
+
+    video.playbackRate = pitch;
+    const drift = Math.abs(video.currentTime - targetTime);
+    if (drift > (isPlaying ? 0.08 : 0.02)) {
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        // Metadata may not be ready yet; the next tick will try again.
+      }
+    }
+
+    if (isPlaying && shouldPlayVideo) {
+      void video.play().catch(() => undefined);
+    } else {
+      video.pause();
+    }
+  }, [
+    currentTime,
+    isPlaying,
+    timeline?.pitch,
+    timeline?.songOffsetMs,
+    track?.loopVideo,
+    track?.videoOffsetSec,
+    videoActive,
+    videoSource,
+  ]);
+
   function handleTopbarMouseDown(event: MouseEvent<HTMLElement>) {
     if (event.button !== 0 || shouldSkipWindowDrag(event.target)) {
       return;
@@ -143,7 +214,31 @@ export function FullPlayerOverlay({
   }
 
   return (
-    <section className={closing ? "player-overlay closing" : "player-overlay"} style={style}>
+    <section
+      className={[
+        "player-overlay",
+        closing ? "closing" : "",
+        videoActive ? "video-active" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={style}
+    >
+      {videoActive && videoSource && (
+        <>
+          <video
+            ref={videoRef}
+            className="player-video-bg"
+            src={videoSource}
+            muted
+            playsInline
+            loop={Boolean(track?.loopVideo)}
+            preload="auto"
+          />
+          <div className="player-video-scrim" aria-hidden="true" />
+        </>
+      )}
+
       <header
         className="player-topbar"
         onMouseDown={handleTopbarMouseDown}
@@ -166,38 +261,51 @@ export function FullPlayerOverlay({
         </div>
       </header>
 
-      <div className="player-stage">
-        <div
-          ref={turntableRef}
-          className={isOpening ? "turntable-card opening" : "turntable-card"}
-          style={entryStyle}
-        >
-          <img className="turntable-image" src={turntablePlayer} alt="" aria-hidden="true" />
+      <div className={videoActive ? "player-stage video-stage" : "player-stage"}>
+        {!videoActive && (
           <div
-            className={isPlaying ? "turntable-artwork spinning" : "turntable-artwork"}
-            style={artworkTransitionStyle}
+            ref={turntableRef}
+            className={isOpening ? "turntable-card opening" : "turntable-card"}
+            style={entryStyle}
           >
-            {cover ? <img src={cover} alt={`${track?.title ?? "音乐"} 封面`} /> : <Disc3 aria-hidden="true" />}
+            <img className="turntable-image" src={turntablePlayer} alt="" aria-hidden="true" />
+            <div
+              className={isPlaying ? "turntable-artwork spinning" : "turntable-artwork"}
+              style={artworkTransitionStyle}
+            >
+              <img src={cover} alt={`${track?.title ?? "音乐"} 封面`} />
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="player-info">
-          <div className="info-title">
-            <h1>{track?.title ?? "还没有播放音乐"}</h1>
-            <span>{track?.artist ?? "ADOFAI Music Box"}</span>
-          </div>
-          <div className="info-stream">
-            {infoItems.map((item, index) => (
-              <InfoLine
-                key={`${item.label}-${index}`}
-                label={item.label}
-                value={item.value}
-                highlight={item.highlight}
-              />
-            ))}
-          </div>
-        </div>
+        {!videoActive && <TrackInfoPanel infoItems={infoItems} track={track} />}
       </div>
+
+      {videoActive && (
+        <>
+          <button
+            className={videoInfoOpen ? "video-info-tab hidden" : "video-info-tab"}
+            type="button"
+            onClick={() => setVideoInfoOpen(true)}
+            title="展开谱面信息"
+          >
+            <PanelRightOpen aria-hidden="true" />
+            <span>谱面信息</span>
+          </button>
+          <aside className={videoInfoOpen ? "video-info-drawer open" : "video-info-drawer"}>
+            <header>
+              <div>
+                <strong>{track?.title ?? "谱面信息"}</strong>
+                <span>{track?.artist ?? "ADOFAI Music Box"}</span>
+              </div>
+              <button type="button" onClick={() => setVideoInfoOpen(false)} title="收起谱面信息">
+                <PanelRightClose aria-hidden="true" />
+              </button>
+            </header>
+            <TrackInfoPanel infoItems={infoItems} track={track} compact />
+          </aside>
+        </>
+      )}
 
       <footer className="overlay-controls">
         <div className="overlay-track">
@@ -237,12 +345,23 @@ export function FullPlayerOverlay({
             max={seekMax}
             step="0.01"
             value={Math.min(currentTime, seekMax)}
+            style={progressStyle}
             onChange={(event) => onSeek(Number(event.currentTarget.value))}
             aria-label="播放进度"
           />
           <span>{formatDuration(safeDuration)}</span>
         </div>
         <div className="overlay-right">
+          {hasVideo && (
+            <button
+              className={videoEnabled ? "plain-icon active" : "plain-icon"}
+              type="button"
+              onClick={() => setVideoEnabled((enabled) => !enabled)}
+              title={videoEnabled ? "关闭视频" : "打开视频"}
+            >
+              {videoEnabled ? <Video aria-hidden="true" /> : <VideoOff aria-hidden="true" />}
+            </button>
+          )}
           <label className="overlay-volume">
             <input
               type="range"
@@ -257,6 +376,35 @@ export function FullPlayerOverlay({
         </div>
       </footer>
     </section>
+  );
+}
+
+interface TrackInfoPanelProps {
+  track: TrackSummary | null;
+  infoItems: Array<{ label: string; value: string; highlight?: boolean }>;
+  compact?: boolean;
+}
+
+function TrackInfoPanel({ track, infoItems, compact = false }: TrackInfoPanelProps) {
+  return (
+    <div className={compact ? "player-info compact" : "player-info"}>
+      {!compact && (
+        <div className="info-title">
+          <h1>{track?.title ?? "还没有播放音乐"}</h1>
+          <span>{track?.artist ?? "ADOFAI Music Box"}</span>
+        </div>
+      )}
+      <div className="info-stream">
+        {infoItems.map((item, index) => (
+          <InfoLine
+            key={`${item.label}-${index}`}
+            label={item.label}
+            value={item.value}
+            highlight={item.highlight}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

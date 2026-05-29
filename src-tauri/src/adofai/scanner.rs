@@ -120,6 +120,8 @@ pub fn summary_from_path(path: &Path, lenient: bool) -> TrackSummary {
                 audio_file_size: None,
                 video_path: None,
                 has_video: false,
+                video_offset_sec: 0.0,
+                loop_video: false,
                 parse_status: {
                     let _ = err;
                     ParseStatus::Error
@@ -149,7 +151,11 @@ fn summary_from_parsed(
     let icon_path = resolve_sibling(path, string_setting(&settings, "previewIcon").as_deref())
         .filter(|path| path.exists())
         .or_else(|| find_first_named_image(path.parent(), &["icon", "previewicon"]));
-    let video_path = find_first_with_extensions(path.parent(), VIDEO_EXTENSIONS);
+    let video_path = resolve_sibling(path, string_setting(&settings, "bgVideo").as_deref())
+        .filter(|path| path.exists())
+        .or_else(|| find_first_with_extensions(path.parent(), VIDEO_EXTENSIONS));
+    let video_offset_sec = number_setting(&settings, "vidOffset", 0.0) / 1000.0;
+    let loop_video = bool_setting(&settings, "loopVideo", false);
 
     if audio_path.as_ref().is_none_or(|path| !path.exists()) {
         warnings.push("未找到谱面引用的音乐文件".to_string());
@@ -192,6 +198,8 @@ fn summary_from_parsed(
         audio_file_size,
         video_path: path_string(video_path.clone()),
         has_video: video_path.is_some(),
+        video_offset_sec,
+        loop_video,
         parse_status: if !warnings.is_empty() {
             ParseStatus::Warning
         } else if parse_mode == "strict-json" {
@@ -389,6 +397,17 @@ fn find_first_named_image(folder: Option<&Path>, names: &[&str]) -> Option<PathB
 
 fn path_string(path: Option<PathBuf>) -> Option<String> {
     path.map(|path| path.to_string_lossy().to_string())
+}
+
+fn bool_setting(settings: &BTreeMap<String, Value>, key: &str, fallback: bool) -> bool {
+    settings
+        .get(key)
+        .and_then(|value| match value {
+            Value::Bool(value) => Some(*value),
+            Value::String(text) => text.parse::<bool>().ok(),
+            _ => None,
+        })
+        .unwrap_or(fallback)
 }
 
 fn normalize_path_key(path: &str) -> String {

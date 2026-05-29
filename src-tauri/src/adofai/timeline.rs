@@ -71,8 +71,13 @@ pub fn build_timeline_from_root(
         number_setting(&settings, "countdownSpeedMultiplier", 1.0).max(0.01);
     let adjusted_countdown_ticks = countdown_ticks / countdown_speed_multiplier;
     let separate_countdown_time = bool_setting(&settings, "separateCountdownTime", true);
+    let countdown_lead_in_sec = if separate_countdown_time {
+        (60.0 / bpm) * adjusted_countdown_ticks
+    } else {
+        0.0
+    };
     let song_start_delay = if separate_countdown_time {
-        (60.0 / bpm) * adjusted_countdown_ticks / pitch
+        countdown_lead_in_sec / pitch
     } else {
         0.0
     };
@@ -90,6 +95,7 @@ pub fn build_timeline_from_root(
 
     let mut timeline = AudioTimeline {
         song_offset_ms: offset_ms,
+        countdown_lead_in_sec,
         pitch,
         duration: floors
             .last()

@@ -87,7 +87,7 @@ export function MiniPlayer({
           title="打开播放页"
           style={artworkTransitionStyle}
         >
-          <EmptyArtwork title={track?.title ?? "默认封面"} imagePath={track?.coverPath} size="sm" />
+          <EmptyArtwork title={track?.title ?? "默认封面"} imagePath={track?.coverPath} size="sm" fallback="cover" />
         </button>
         <button className="mini-title" type="button" onClick={handleOpenPlayer}>
           <strong>{track?.title ?? "还没有播放音乐"}</strong>

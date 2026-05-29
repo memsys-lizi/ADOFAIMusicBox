@@ -1,26 +1,16 @@
-import { Disc3 } from "lucide-react";
-import type { CSSProperties } from "react";
-import { fallbackCoverSeed, toAssetUrl } from "../lib/assets";
+import defaultCover from "../assets/header.jpg";
+import defaultIcon from "../assets/icon.jpg";
+import { toAssetUrl } from "../lib/assets";
 
 interface EmptyArtworkProps {
   title: string;
   imagePath?: string | null;
   size?: "sm" | "md" | "lg";
+  fallback?: "icon" | "cover";
 }
 
-export function EmptyArtwork({ title, imagePath, size = "md" }: EmptyArtworkProps) {
-  const image = toAssetUrl(imagePath);
-  if (image) {
-    return <img className={`artwork artwork-${size}`} src={image} alt={`${title} 封面`} />;
-  }
-
-  return (
-    <div
-      className={`artwork artwork-${size} generated-artwork`}
-      style={{ "--cover-angle": fallbackCoverSeed(title) } as CSSProperties}
-      aria-label={`${title} 默认封面`}
-    >
-      <Disc3 aria-hidden="true" />
-    </div>
-  );
+export function EmptyArtwork({ title, imagePath, size = "md", fallback }: EmptyArtworkProps) {
+  const fallbackKind = fallback ?? (size === "sm" ? "icon" : "cover");
+  const image = toAssetUrl(imagePath) ?? (fallbackKind === "icon" ? defaultIcon : defaultCover);
+  return <img className={`artwork artwork-${size}`} src={image} alt={`${title} 封面`} />;
 }

@@ -113,6 +113,8 @@ pub struct TrackSummary {
     pub audio_file_size: Option<u64>,
     pub video_path: Option<String>,
     pub has_video: bool,
+    pub video_offset_sec: f64,
+    pub loop_video: bool,
     pub parse_status: ParseStatus,
 }
 
@@ -151,6 +153,7 @@ pub struct ResourceStatus {
 #[serde(rename_all = "camelCase")]
 pub struct AudioTimeline {
     pub song_offset_ms: f64,
+    pub countdown_lead_in_sec: f64,
     pub pitch: f64,
     pub duration: f64,
     pub hit_events: Vec<HitEvent>,
