@@ -19,7 +19,6 @@ interface AppShellProps {
   favoriteCount: number;
   recentCount: number;
   searchQuery: string;
-  isScanning: boolean;
   children: ReactNode;
   onViewChange: (view: AppView) => void;
   onSearchChange: (query: string) => void;
@@ -39,7 +38,6 @@ export function AppShell({
   favoriteCount,
   recentCount,
   searchQuery,
-  isScanning,
   children,
   onViewChange,
   onSearchChange,
@@ -98,18 +96,10 @@ export function AppShell({
         </nav>
 
         <section className="sidebar-section">
-          <div className="section-title">
-            <span>本地来源</span>
-          </div>
           <button className="source-manage" type="button" onClick={onOpenFolderManager}>
             <span>管理来源</span>
             <strong>{(settings?.folders.length ?? 0) + (settings?.adofaiFiles?.length ?? 0)}</strong>
           </button>
-          <div className="source-stats" aria-label="本地来源统计">
-            <span>文件夹 {settings?.folders.length ?? 0}</span>
-            <span>单曲 {settings?.adofaiFiles?.length ?? 0}</span>
-            <span>{isScanning ? "扫描中" : `曲目 ${tracks.length}`}</span>
-          </div>
         </section>
       </aside>
 

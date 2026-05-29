@@ -1,5 +1,4 @@
 import {
-  Disc3,
   Heart,
   ListMusic,
   Pause,
@@ -10,10 +9,8 @@ import {
   SkipBack,
   SkipForward,
   SlidersHorizontal,
-  Volume2,
-  Waves,
 } from "lucide-react";
-import { type CSSProperties, type ReactNode, useRef, useState } from "react";
+import { type CSSProperties, useRef, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration } from "../../lib/format";
 import type { PlaybackMode, PlayerOpenSourceRect, TrackSummary } from "../../types/domain";
@@ -27,8 +24,6 @@ interface MiniPlayerProps {
   hitSoundVolume: number;
   playSoundVolume: number;
   playbackMode: PlaybackMode;
-  hitSoundsEnabled: boolean;
-  playSoundsEnabled: boolean;
   isFavorite: boolean;
   isPlayerOpen: boolean;
   onOpenPlayer: (sourceRect?: PlayerOpenSourceRect) => void;
@@ -39,8 +34,6 @@ interface MiniPlayerProps {
   onMusicVolumeChange: (volume: number) => void;
   onHitSoundVolumeChange: (volume: number) => void;
   onPlaySoundVolumeChange: (volume: number) => void;
-  onToggleHitSounds: (enabled: boolean) => void;
-  onTogglePlaySounds: (enabled: boolean) => void;
   onCyclePlaybackMode: () => void;
   onToggleFavorite: () => void;
 }
@@ -54,8 +47,6 @@ export function MiniPlayer({
   hitSoundVolume,
   playSoundVolume,
   playbackMode,
-  hitSoundsEnabled,
-  playSoundsEnabled,
   isFavorite,
   isPlayerOpen,
   onOpenPlayer,
@@ -66,8 +57,6 @@ export function MiniPlayer({
   onMusicVolumeChange,
   onHitSoundVolumeChange,
   onPlaySoundVolumeChange,
-  onToggleHitSounds,
-  onTogglePlaySounds,
   onCyclePlaybackMode,
   onToggleFavorite,
 }: MiniPlayerProps) {
@@ -129,9 +118,6 @@ export function MiniPlayer({
           <button className="plain-icon" type="button" onClick={onNext} title="下一首">
             <SkipForward aria-hidden="true" />
           </button>
-          <button className="plain-icon" type="button" title="音量" onClick={() => setMixOpen((open) => !open)}>
-            <Volume2 aria-hidden="true" />
-          </button>
         </div>
         <div className="mini-progress">
           <span>{formatDuration(currentTime)}</span>
@@ -150,22 +136,7 @@ export function MiniPlayer({
       </div>
 
       <div className="mini-actions">
-        <ToggleIcon
-          active={hitSoundsEnabled}
-          icon={<Waves aria-hidden="true" />}
-          label="打拍音"
-          onClick={() => onToggleHitSounds(!hitSoundsEnabled)}
-        />
-        <ToggleIcon
-          active={playSoundsEnabled}
-          icon={<Disc3 aria-hidden="true" />}
-          label="音效"
-          onClick={() => onTogglePlaySounds(!playSoundsEnabled)}
-        />
-        <button className="plain-icon labeled" type="button" title="队列">
-          <ListMusic aria-hidden="true" />
-        </button>
-        <button className="plain-icon labeled" type="button" onClick={() => setMixOpen((open) => !open)} title="混音">
+        <button className="plain-icon labeled" type="button" onClick={() => setMixOpen((open) => !open)} title="音量">
           <SlidersHorizontal aria-hidden="true" />
         </button>
       </div>
@@ -188,26 +159,6 @@ function rectToSource(rect: DOMRect): PlayerOpenSourceRect {
     width: rect.width,
     height: rect.height,
   };
-}
-
-interface ToggleIconProps {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}
-
-function ToggleIcon({ active, icon, label, onClick }: ToggleIconProps) {
-  return (
-    <button
-      className={active ? "plain-icon labeled active" : "plain-icon labeled"}
-      type="button"
-      onClick={onClick}
-      title={label}
-    >
-      {icon}
-    </button>
-  );
 }
 
 interface VolumeSliderProps {

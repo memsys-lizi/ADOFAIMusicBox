@@ -45,6 +45,10 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
   const playingRef = useRef(false);
   const sessionRef = useRef(0);
   const onEndedRef = useRef<(() => void) | undefined>(options.onEnded);
+  const hitSoundVolumeRef = useRef(options.hitSoundVolume);
+  const playSoundVolumeRef = useRef(options.playSoundVolume);
+  const hitSoundsEnabledRef = useRef(true);
+  const playSoundsEnabledRef = useRef(true);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -231,24 +235,17 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
       return;
     }
     const now = transportTime();
-    if (hitSoundsEnabled) {
+    if (hitSoundsEnabledRef.current) {
       for (const event of [...timeline.hitEvents, ...timeline.holdSoundEvents]) {
-        void scheduleEvent(event, options.hitSoundVolume, "hit", now);
+        void scheduleEvent(event, hitSoundVolumeRef.current, "hit", now);
       }
     }
-    if (playSoundsEnabled) {
+    if (playSoundsEnabledRef.current) {
       for (const event of timeline.playSoundEvents) {
-        void scheduleEvent(event, options.playSoundVolume, "play", now);
+        void scheduleEvent(event, playSoundVolumeRef.current, "play", now);
       }
     }
-  }, [
-    hitSoundsEnabled,
-    options.hitSoundVolume,
-    options.playSoundVolume,
-    playSoundsEnabled,
-    scheduleEvent,
-    transportTime,
-  ]);
+  }, [scheduleEvent, transportTime]);
 
   const startScheduler = useCallback(() => {
     stopScheduler();
@@ -380,6 +377,22 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
   useEffect(() => {
     onEndedRef.current = options.onEnded;
   }, [options.onEnded]);
+
+  useEffect(() => {
+    hitSoundVolumeRef.current = clampVolume(options.hitSoundVolume);
+  }, [options.hitSoundVolume]);
+
+  useEffect(() => {
+    playSoundVolumeRef.current = clampVolume(options.playSoundVolume);
+  }, [options.playSoundVolume]);
+
+  useEffect(() => {
+    hitSoundsEnabledRef.current = hitSoundsEnabled;
+  }, [hitSoundsEnabled]);
+
+  useEffect(() => {
+    playSoundsEnabledRef.current = playSoundsEnabled;
+  }, [playSoundsEnabled]);
 
   useEffect(() => {
     const context = contextRef.current;

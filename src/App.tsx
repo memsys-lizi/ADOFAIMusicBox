@@ -404,7 +404,6 @@ function App() {
         favoriteCount={favoriteTrackCount}
         recentCount={recentTrackCount}
         searchQuery={searchQuery}
-        isScanning={isScanning}
         onViewChange={setActiveView}
         onSearchChange={setSearchQuery}
         onOpenFolderManager={() => setFolderManagerOpen(true)}
@@ -448,8 +447,6 @@ function App() {
         hitSoundVolume={settings?.hitSoundVolume ?? 0.82}
         playSoundVolume={settings?.playSoundVolume ?? 0.78}
         playbackMode={settings?.playbackMode ?? "sequence"}
-        hitSoundsEnabled={audio.hitSoundsEnabled}
-        playSoundsEnabled={audio.playSoundsEnabled}
         isFavorite={selectedIsFavorite}
         isPlayerOpen={playerOpen && !playerClosing}
         onOpenPlayer={handleOpenPlayer}
@@ -460,8 +457,6 @@ function App() {
         onMusicVolumeChange={(musicVolume) => patchSettings({ musicVolume })}
         onHitSoundVolumeChange={(hitSoundVolume) => patchSettings({ hitSoundVolume })}
         onPlaySoundVolumeChange={(playSoundVolume) => patchSettings({ playSoundVolume })}
-        onToggleHitSounds={audio.setHitSoundsEnabled}
-        onTogglePlaySounds={audio.setPlaySoundsEnabled}
         onCyclePlaybackMode={cyclePlaybackMode}
         onToggleFavorite={() => handleToggleFavorite()}
       />

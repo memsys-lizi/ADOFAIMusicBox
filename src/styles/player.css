@@ -28,10 +28,11 @@
 
 .mini-track {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) 30px;
+  grid-template-columns: 50px minmax(0, max-content) 30px;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
   min-width: 0;
+  justify-content: start;
 }
 
 .mini-cover,
@@ -89,6 +90,7 @@
   display: grid;
   gap: 3px;
   min-width: 0;
+  max-width: 210px;
 }
 
 .mini-title strong {
@@ -245,7 +247,6 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
 }
 
 .mini-actions .plain-icon {

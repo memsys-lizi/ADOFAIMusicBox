@@ -97,17 +97,7 @@
 
 .sidebar-section {
   display: grid;
-  gap: 8px;
   margin-top: auto;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .source-manage {
@@ -133,16 +123,9 @@
   font-size: 18px;
 }
 
-.source-manage span,
-.source-stats span {
+.source-manage span {
   color: var(--muted);
   font-size: 13px;
-}
-
-.source-stats {
-  display: grid;
-  gap: 6px;
-  padding: 3px 8px 0;
 }
 
 .content-shell {

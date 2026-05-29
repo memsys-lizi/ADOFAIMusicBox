@@ -93,6 +93,18 @@ fn repair_lenient_json_text(input: &str) -> String {
             continue;
         }
 
+        if ch == '}' || ch == ']' {
+            out.push(ch);
+            let mut lookahead = chars.clone();
+            while matches!(lookahead.peek(), Some(next) if next.is_whitespace()) {
+                lookahead.next();
+            }
+            if matches!(lookahead.peek(), Some('{') | Some('"')) {
+                out.push(',');
+            }
+            continue;
+        }
+
         if ch == ',' {
             let mut lookahead = chars.clone();
             while matches!(lookahead.peek(), Some(next) if next.is_whitespace()) {

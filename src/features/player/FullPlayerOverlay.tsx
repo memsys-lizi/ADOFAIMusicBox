@@ -12,8 +12,6 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-  Volume2,
-  Waves,
   X,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
@@ -230,9 +228,6 @@ export function FullPlayerOverlay({
           <button className="plain-icon" type="button" onClick={onNext} title="下一首">
             <SkipForward aria-hidden="true" />
           </button>
-          <button className="plain-icon" type="button" title="音量">
-            <Volume2 aria-hidden="true" />
-          </button>
         </div>
         <div className="overlay-progress">
           <span>{formatDuration(currentTime)}</span>
@@ -248,12 +243,6 @@ export function FullPlayerOverlay({
           <span>{formatDuration(safeDuration)}</span>
         </div>
         <div className="overlay-right">
-          <button className="plain-icon labeled active" type="button" title="打拍音">
-            <Waves aria-hidden="true" />
-          </button>
-          <button className="plain-icon labeled" type="button" title="队列">
-            <ListMusic aria-hidden="true" />
-          </button>
           <label className="overlay-volume">
             <input
               type="range"
