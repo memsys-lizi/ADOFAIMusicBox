@@ -19,6 +19,27 @@ body {
   -webkit-user-select: none;
 }
 
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+  background-clip: content-box;
+}
+
 button,
 input,
 select {
@@ -162,7 +183,7 @@ input[type="range"] {
 .tool-button:hover,
 .round-button:hover,
 .heart-button:hover {
-  background: #e8e8e8;
+  background: #ececec;
 }
 
 .plain-icon.active,
@@ -188,27 +209,27 @@ input[type="range"] {
   justify-content: center;
   gap: 7px;
   min-width: 88px;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 16px;
   border-radius: 999px;
   color: #111111;
-  background: #e8e8e8;
+  background: #ebebeb;
   transition:
     background 160ms ease,
     color 160ms ease;
 }
 
 .pill-button:hover {
-  background: #dddddd;
+  background: #e0e0e0;
 }
 
 .pill-button.main {
   color: #0d0f0e;
-  background: #e2e2e2;
+  background: #e7e7e7;
 }
 
 .pill-button.main:hover {
-  background: #d8d8d8;
+  background: #dddddd;
 }
 
 .spinning-icon {

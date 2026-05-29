@@ -1,7 +1,10 @@
 .library-page {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  height: 100%;
   min-height: 100%;
+  overflow: hidden;
 }
 
 .library-header {
@@ -9,14 +12,15 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 8px 0 22px;
+  padding: 8px 0 20px;
 }
 
 .library-header h1 {
-  margin: 0 0 22px;
+  margin: 0 0 21px;
   font-size: 36px;
   line-height: 1;
   letter-spacing: 0;
+  font-weight: 700;
 }
 
 .library-tabs {
@@ -30,6 +34,7 @@
   position: relative;
   padding: 0;
   color: #202124;
+  font-size: 14px;
   background: transparent;
 }
 
@@ -51,7 +56,7 @@
 .library-summary {
   display: flex;
   gap: 18px;
-  padding-top: 56px;
+  padding-top: 55px;
   color: #5f6368;
   font-size: 14px;
 }
@@ -61,8 +66,8 @@
   grid-template-columns: auto auto auto minmax(0, 1fr);
   align-items: center;
   gap: 14px;
-  min-height: 46px;
-  margin-bottom: 14px;
+  min-height: 44px;
+  margin-bottom: 12px;
 }
 
 .more-wrap {
@@ -117,18 +122,27 @@
 }
 
 .track-table {
-  display: grid;
-  align-content: start;
+  display: block;
+  align-self: stretch;
+  height: 100%;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 10px 14px 0;
+  scrollbar-gutter: stable;
 }
 
 .track-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(360px, 1fr) 180px 72px 78px;
   gap: 12px;
-  padding: 0 28px 8px 8px;
+  padding: 8px 28px 9px 8px;
   color: #686d72;
   font-size: 12px;
+  background: var(--surface);
 }
 
 .track-head span:first-child {
@@ -140,17 +154,22 @@
   grid-template-columns: minmax(360px, 1fr) 36px 36px 180px 72px 78px;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
-  padding: 7px 18px 7px 8px;
+  min-height: 56px;
+  padding: 6px 18px 6px 8px;
   border-radius: 0;
   color: #111111;
   outline: 0;
-  transition: background 150ms ease;
+  transition:
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
 
-.track-row:hover,
+.track-row:hover {
+  background: #f6f6f6;
+}
+
 .track-row.selected {
-  background: #f1f1f1;
+  background: #f0f0f0;
 }
 
 .song-cell {
@@ -187,17 +206,20 @@
 .song-cell strong,
 .card-meta strong {
   font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .song-cell span,
 .card-meta span,
 .mapper-cell {
-  color: #5f6368;
+  color: #62666c;
   font-size: 13px;
+  line-height: 1.2;
 }
 
 .track-row > span {
-  color: #4b4f55;
+  color: #4f545a;
   font-size: 13px;
 }
 
@@ -221,9 +243,15 @@
 
 .cover-grid {
   display: grid;
+  align-self: stretch;
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: 22px;
-  padding-top: 6px;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px 10px 16px 0;
+  scrollbar-gutter: stable;
 }
 
 .track-card {

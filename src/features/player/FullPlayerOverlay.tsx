@@ -64,6 +64,23 @@ export function FullPlayerOverlay({
   const cover = toAssetUrl(track?.coverPath);
   const safeDuration = duration || timeline?.duration || track?.duration || 0;
   const seekMax = Math.max(1, safeDuration);
+  const infoItems = [
+    { label: "曲名", value: track?.title ?? "--" },
+    { label: "作曲", value: track?.artist ?? "--", highlight: true },
+    { label: "谱师", value: track?.author ?? "--" },
+    { label: "BPM", value: track ? `${Math.round(track.bpm)}` : "--" },
+    { label: "时长", value: formatDuration(safeDuration) },
+    { label: "打拍音", value: `${formatCount(timeline?.hitEvents.length ?? 0)} 个` },
+    { label: "谱面音效", value: `${formatCount(timeline?.playSoundEvents.length ?? 0)} 个` },
+    { label: "长按音", value: `${formatCount(timeline?.holdSoundEvents.length ?? 0)} 个` },
+    { label: "音乐文件", value: formatFileSize(track?.audioFileSize) },
+    { label: "视频", value: track?.hasVideo ? "有" : "无" },
+    { label: "谱面文件", value: fileName(track?.adofaiPath) },
+    { label: "音频文件", value: fileName(track?.audioPath) },
+    { label: "封面", value: fileName(track?.coverPath) },
+    { label: "图标", value: fileName(track?.iconPath) },
+    { label: "视频文件", value: fileName(track?.videoPath) },
+  ];
 
   const style = {
     "--player-accent": palette.accent,
@@ -132,15 +149,14 @@ export function FullPlayerOverlay({
             <span>{track?.artist ?? "ADOFAI Music Box"}</span>
           </div>
           <div className="info-stream">
-            <InfoLine label="曲名" value={track?.title ?? "--"} />
-            <InfoLine label="作曲" value={track?.artist ?? "--"} highlight />
-            <InfoLine label="谱师" value={track?.author ?? "--"} />
-            <InfoLine label="BPM" value={track ? `${Math.round(track.bpm)}` : "--"} />
-            <InfoLine label="时长" value={formatDuration(safeDuration)} />
-            <InfoLine label="打拍音" value={`${formatCount(timeline?.hitEvents.length ?? 0)} 个`} />
-            <InfoLine label="谱面音效" value={`${formatCount(timeline?.playSoundEvents.length ?? 0)} 个`} />
-            <InfoLine label="音乐文件" value={formatFileSize(track?.audioFileSize)} />
-            <InfoLine label="视频" value={track?.hasVideo ? "有" : "无"} />
+            {infoItems.map((item, index) => (
+              <InfoLine
+                key={`${item.label}-${index}`}
+                label={item.label}
+                value={item.value}
+                highlight={item.highlight}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -226,12 +242,24 @@ interface InfoLineProps {
 }
 
 function InfoLine({ label, value, highlight = false }: InfoLineProps) {
+  const className = ["info-line", highlight ? "highlight" : ""]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={highlight ? "info-line highlight" : "info-line"}>
+    <div className={className}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
+}
+
+function fileName(path?: string | null) {
+  if (!path) {
+    return "无";
+  }
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
 }
 
 function playbackModeLabel(mode: PlaybackMode) {

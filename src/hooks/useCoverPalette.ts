@@ -63,12 +63,13 @@ export function useCoverPalette(imagePath?: string | null): CoverPalette {
         }
 
         const hsl = rgbToHsl(red / count, green / count, blue / count);
+        const accentLightness = clamp(hsl.l, 42, 56);
         const next: CoverPalette = {
-          accent: hslToCss(hsl.h, Math.max(46, hsl.s), clamp(hsl.l, 42, 58)),
-          accentText: hsl.l > 55 ? "#161713" : "#ffffff",
-          backgroundA: hslToCss(hsl.h, Math.max(50, hsl.s), 93),
-          backgroundB: hslToCss((hsl.h + 36) % 360, Math.max(42, hsl.s - 4), 89),
-          soft: hslToCss(hsl.h, Math.max(38, hsl.s), 78),
+          accent: hslToCss(hsl.h, clamp(hsl.s + 8, 46, 68), accentLightness),
+          accentText: accentLightness > 53 ? "#161713" : "#ffffff",
+          backgroundA: hslToCss(hsl.h, clamp(hsl.s * 0.34, 18, 34), 94),
+          backgroundB: hslToCss((hsl.h + 32) % 360, clamp(hsl.s * 0.28, 16, 30), 89),
+          soft: hslToCss(hsl.h, clamp(hsl.s * 0.42, 22, 38), 80),
         };
         if (!cancelled) {
           setPalette(next);
