@@ -1,5 +1,5 @@
 use super::models::{AudioTimeline, LibrarySettings, TrackDetail, TrackSummary};
-use super::scanner::{detail_from_path, scan_folders};
+use super::scanner::{detail_from_path, scan_sources};
 use super::settings::{load_settings, save_settings as persist_settings};
 use super::timeline::build_timeline_from_path;
 use std::path::Path;
@@ -13,7 +13,11 @@ pub struct AppState {
 impl AppState {
     pub fn load() -> Self {
         let settings = load_settings();
-        let tracks = scan_folders(&settings.folders, settings.lenient_parsing);
+        let tracks = scan_sources(
+            &settings.folders,
+            &settings.adofai_files,
+            settings.lenient_parsing,
+        );
         Self {
             settings: Mutex::new(settings),
             tracks: Mutex::new(tracks),
@@ -68,13 +72,48 @@ pub fn add_library_folder(
 }
 
 #[tauri::command]
+pub fn add_library_file(
+    state: tauri::State<'_, AppState>,
+    file: String,
+) -> Result<LibrarySettings, String> {
+    let mut settings = state
+        .settings
+        .lock()
+        .map_err(|_| "设置状态已损坏".to_string())?;
+    let path = Path::new(&file);
+    if !path.exists() || !path.is_file() {
+        return Err("谱面文件不存在".to_string());
+    }
+    if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_none_or(|ext| !ext.eq_ignore_ascii_case("adofai"))
+    {
+        return Err("请选择 ADOFAI 谱面文件".to_string());
+    }
+    if !settings
+        .adofai_files
+        .iter()
+        .any(|existing| existing.eq_ignore_ascii_case(&file))
+    {
+        settings.adofai_files.push(file);
+        persist_settings(&settings)?;
+    }
+    Ok(settings.clone())
+}
+
+#[tauri::command]
 pub fn scan_library(state: tauri::State<'_, AppState>) -> Result<Vec<TrackSummary>, String> {
     let settings = state
         .settings
         .lock()
         .map_err(|_| "设置状态已损坏".to_string())?
         .clone();
-    let tracks = scan_folders(&settings.folders, settings.lenient_parsing);
+    let tracks = scan_sources(
+        &settings.folders,
+        &settings.adofai_files,
+        settings.lenient_parsing,
+    );
     let mut stored = state
         .tracks
         .lock()

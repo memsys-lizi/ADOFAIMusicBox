@@ -1,17 +1,11 @@
 import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  FolderPlus,
   Heart,
-  Home,
   Library,
   ListMusic,
   Maximize2,
   Minimize,
   Music2,
   Search,
-  Settings,
   X,
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
@@ -29,9 +23,7 @@ interface AppShellProps {
   children: ReactNode;
   onViewChange: (view: AppView) => void;
   onSearchChange: (query: string) => void;
-  onAddFolder: () => void;
   onOpenFolderManager: () => void;
-  onScan: () => void;
 }
 
 const navItems: Array<{ id: AppView; label: string; icon: typeof Library; count: "tracks" | "favorites" | "recent" }> = [
@@ -51,9 +43,7 @@ export function AppShell({
   children,
   onViewChange,
   onSearchChange,
-  onAddFolder,
   onOpenFolderManager,
-  onScan,
 }: AppShellProps) {
   function handleTitlebarMouseDown(event: MouseEvent<HTMLElement>) {
     if (event.button !== 0 || shouldSkipWindowDrag(event.target)) {
@@ -73,7 +63,7 @@ export function AppShell({
   return (
     <div className="app-frame">
       <aside className="sidebar">
-        <button className="brand-card" type="button" onClick={() => onViewChange("local")}>
+        <div className="brand-card">
           <span className="brand-mark" aria-hidden="true">
             <ListMusic />
           </span>
@@ -81,22 +71,6 @@ export function AppShell({
             <strong>ADOFAI</strong>
             <small>Music Box</small>
           </span>
-          <ChevronDown aria-hidden="true" />
-        </button>
-
-        <div className="quick-grid" aria-label="快捷入口">
-          <button type="button" className="quick-tile active" onClick={() => onViewChange("local")}>
-            <Home aria-hidden="true" />
-          </button>
-          <button type="button" className="quick-tile" onClick={onOpenFolderManager}>
-            <Settings aria-hidden="true" />
-          </button>
-          <button type="button" className="quick-tile" onClick={() => onViewChange("favorites")}>
-            <Heart aria-hidden="true" />
-          </button>
-          <button type="button" className="quick-tile dashed" onClick={onAddFolder}>
-            <FolderPlus aria-hidden="true" />
-          </button>
         </div>
 
         <nav className="main-nav" aria-label="主导航">
@@ -126,18 +100,16 @@ export function AppShell({
         <section className="sidebar-section">
           <div className="section-title">
             <span>本地来源</span>
-            <button type="button" onClick={onOpenFolderManager} title="管理文件夹">
-              <Settings aria-hidden="true" />
-            </button>
           </div>
-          <button className="source-card" type="button" onClick={onOpenFolderManager}>
-            <strong>{settings?.folders.length ?? 0}</strong>
-            <span>个文件夹</span>
+          <button className="source-manage" type="button" onClick={onOpenFolderManager}>
+            <span>管理来源</span>
+            <strong>{(settings?.folders.length ?? 0) + (settings?.adofaiFiles?.length ?? 0)}</strong>
           </button>
-          <button className="source-card" type="button" onClick={onScan}>
-            <strong>{tracks.length}</strong>
-            <span>{isScanning ? "正在整理" : "首曲目"}</span>
-          </button>
+          <div className="source-stats" aria-label="本地来源统计">
+            <span>文件夹 {settings?.folders.length ?? 0}</span>
+            <span>单曲 {settings?.adofaiFiles?.length ?? 0}</span>
+            <span>{isScanning ? "扫描中" : `曲目 ${tracks.length}`}</span>
+          </div>
         </section>
       </aside>
 
@@ -147,14 +119,6 @@ export function AppShell({
           onMouseDown={handleTitlebarMouseDown}
           onDoubleClick={handleTitlebarDoubleClick}
         >
-          <div className="history-controls" data-no-window-drag>
-            <button type="button" title="后退">
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button type="button" title="前进">
-              <ChevronRight aria-hidden="true" />
-            </button>
-          </div>
           <label className="global-search" data-no-window-drag>
             <Search aria-hidden="true" />
             <input

@@ -5,7 +5,7 @@ use super::parser::{
 };
 use super::timeline::build_timeline_from_root;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -14,8 +14,13 @@ const AUDIO_EXTENSIONS: &[&str] = &["ogg", "mp3", "wav", "aif", "aiff", "flac"];
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "webm", "mov", "mkv"];
 
-pub fn scan_folders(folders: &[String], lenient: bool) -> Vec<TrackSummary> {
+pub fn scan_sources(
+    folders: &[String],
+    adofai_files: &[String],
+    lenient: bool,
+) -> Vec<TrackSummary> {
     let mut tracks = Vec::new();
+    let mut seen = HashSet::new();
     for folder in folders {
         let root = Path::new(folder);
         if !root.exists() {
@@ -30,12 +35,20 @@ pub fn scan_folders(folders: &[String], lenient: bool) -> Vec<TrackSummary> {
                 continue;
             }
             let path = entry.path();
-            if !is_adofai(path) || is_ignored_level(path) {
+            if !is_adofai(path) || is_ignored_folder_level(path) {
                 continue;
             }
-            tracks.push(summary_from_path(path, lenient));
+            push_track_once(&mut tracks, &mut seen, path, lenient);
         }
     }
+
+    for file in adofai_files {
+        let path = Path::new(file);
+        if path.exists() && is_adofai(path) && !is_backup_or_hidden(path) {
+            push_track_once(&mut tracks, &mut seen, path, lenient);
+        }
+    }
+
     tracks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     tracks
 }
@@ -263,13 +276,54 @@ fn is_adofai(path: &Path) -> bool {
         .is_some_and(|ext| ext.eq_ignore_ascii_case("adofai"))
 }
 
-fn is_ignored_level(path: &Path) -> bool {
+fn push_track_once(
+    tracks: &mut Vec<TrackSummary>,
+    seen: &mut HashSet<String>,
+    path: &Path,
+    lenient: bool,
+) {
+    let key = path.to_string_lossy().to_lowercase();
+    if seen.insert(key) {
+        tracks.push(summary_from_path(path, lenient));
+    }
+}
+
+fn is_ignored_folder_level(path: &Path) -> bool {
+    is_backup_or_hidden(path) || is_secondary_tutorial_level(path) || is_named_tutorial_level(path)
+}
+
+fn is_backup_or_hidden(path: &Path) -> bool {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_lowercase();
     name == "backup.adofai" || name.starts_with('.')
+}
+
+fn is_secondary_tutorial_level(path: &Path) -> bool {
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    let is_sub_level = stem.starts_with("sub")
+        && stem
+            .trim_start_matches("sub")
+            .chars()
+            .all(|ch| ch.is_ascii_digit());
+    is_sub_level
+        && path
+            .parent()
+            .map(|parent| parent.join("main.adofai").exists())
+            .unwrap_or(false)
+}
+
+fn is_named_tutorial_level(path: &Path) -> bool {
+    path.file_stem()
+        .and_then(|value| value.to_str())
+        .map(|stem| stem.to_lowercase().contains("tutorial"))
+        .unwrap_or(false)
 }
 
 fn stable_id(path: &Path) -> String {

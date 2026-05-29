@@ -8,6 +8,7 @@ import type {
 
 const browserPreviewSettings: LibrarySettings = {
   folders: [],
+  adofaiFiles: [],
   theme: "light",
   musicVolume: 1,
   hitSoundVolume: 0.82,
@@ -43,6 +44,13 @@ export function addLibraryFolder(folder: string): Promise<LibrarySettings> {
     return Promise.resolve({ ...browserPreviewSettings, folders: [folder] });
   }
   return invoke("add_library_folder", { folder });
+}
+
+export function addLibraryFile(file: string): Promise<LibrarySettings> {
+  if (!hasTauriBridge()) {
+    return Promise.resolve({ ...browserPreviewSettings, adofaiFiles: [file] });
+  }
+  return invoke("add_library_file", { file });
 }
 
 export function scanLibrary(): Promise<TrackSummary[]> {

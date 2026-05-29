@@ -90,12 +90,21 @@
 }
 
 .more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-height: 34px;
   padding: 0 10px;
   border-radius: 8px;
   color: #222222;
   text-align: left;
   background: transparent;
+}
+
+.more-menu svg {
+  width: 16px;
+  height: 16px;
+  color: #5f6368;
 }
 
 .more-menu button:hover {
@@ -109,17 +118,67 @@
   gap: 8px;
 }
 
-.inline-search {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #303235;
-  font-size: 13px;
+.sort-wrap {
+  position: relative;
 }
 
-.inline-search svg {
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 34px;
+  min-width: 106px;
+  padding: 0 12px 0 14px;
+  border-radius: 10px;
+  color: #1f2328;
+  background: #efefef;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.sort-button:hover,
+.sort-button:focus-visible {
+  background: #e7e7e7;
+}
+
+.sort-button svg {
   width: 15px;
   height: 15px;
+}
+
+.sort-menu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 8;
+  display: grid;
+  min-width: 118px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+}
+
+.sort-menu button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: #303235;
+  text-align: left;
+  background: transparent;
+}
+
+.sort-menu button:hover {
+  background: #f3f3f3;
+}
+
+.sort-menu button.active {
+  color: var(--active-dark);
+  background: color-mix(in srgb, var(--active) 12%, #ffffff);
 }
 
 .track-table {

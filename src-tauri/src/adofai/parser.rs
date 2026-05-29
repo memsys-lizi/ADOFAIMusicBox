@@ -24,22 +24,23 @@ pub fn parse_level_text(raw: &str, lenient: bool) -> Result<ParsedLevel, String>
             warnings: Vec::new(),
         }),
         Err(strict_err) if lenient => {
-            let cleaned = strip_trailing_commas(text);
+            let cleaned = repair_lenient_json_text(text);
             json5::from_str::<Value>(&cleaned)
                 .map(|root| ParsedLevel {
                     root,
                     parse_mode: "lenient-json5".to_string(),
-                    warnings: vec![format!("谱面不是标准 JSON，已使用宽松解析: {strict_err}")],
+                    warnings: {
+                        let _ = strict_err;
+                        vec!["已自动兼容这个谱面的特殊格式".to_string()]
+                    },
                 })
-                .map_err(|lenient_err| {
-                    format!("谱面解析失败。标准 JSON: {strict_err}; 宽松解析: {lenient_err}")
-                })
+                .map_err(|_lenient_err| "谱面文件格式异常，暂时无法读取".to_string())
         }
-        Err(err) => Err(format!("谱面解析失败: {err}")),
+        Err(_err) => Err("谱面文件格式异常，暂时无法读取".to_string()),
     }
 }
 
-fn strip_trailing_commas(input: &str) -> String {
+fn repair_lenient_json_text(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
     let mut in_string = false;
@@ -49,10 +50,38 @@ fn strip_trailing_commas(input: &str) -> String {
         if in_string {
             if escaped {
                 escaped = false;
-            } else if ch == '\\' {
+                out.push(ch);
+                continue;
+            }
+
+            if ch == '\\' {
                 escaped = true;
-            } else if ch == '"' {
+                out.push(ch);
+                continue;
+            }
+            if ch == '"' {
                 in_string = false;
+                out.push(ch);
+                continue;
+            }
+            if ch == '\n' {
+                out.push_str("\\n");
+                continue;
+            }
+            if ch == '\r' {
+                if matches!(chars.peek(), Some('\n')) {
+                    chars.next();
+                }
+                out.push_str("\\n");
+                continue;
+            }
+            if ch == '\t' {
+                out.push_str("\\t");
+                continue;
+            }
+            if ch.is_control() {
+                out.push_str(&format!("\\u{:04x}", ch as u32));
+                continue;
             }
             out.push(ch);
             continue;
@@ -69,7 +98,7 @@ fn strip_trailing_commas(input: &str) -> String {
             while matches!(lookahead.peek(), Some(next) if next.is_whitespace()) {
                 lookahead.next();
             }
-            if matches!(lookahead.peek(), Some('}') | Some(']')) {
+            if matches!(lookahead.peek(), Some(',') | Some('}') | Some(']')) {
                 continue;
             }
         }

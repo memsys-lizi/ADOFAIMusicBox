@@ -11,13 +11,13 @@
   flex-direction: column;
   gap: 17px;
   min-width: 0;
-  padding: 24px 18px 96px;
+  padding: 24px 18px 18px;
   background: var(--sidebar);
 }
 
 .brand-card {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 16px;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   min-height: 40px;
@@ -60,45 +60,10 @@
   font-size: 12px;
 }
 
-.brand-card > svg {
-  width: 16px;
-  height: 16px;
-  color: #5f6368;
-}
-
-.quick-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.quick-tile {
-  display: grid;
-  height: 52px;
-  place-items: center;
-  border-radius: 11px;
-  color: #6f7378;
-  background: #f6f6f6;
-  transition:
-    color 160ms ease,
-    background 160ms ease;
-}
-
-.quick-tile:hover,
-.quick-tile.active {
-  color: #111111;
-  background: #eaeaea;
-}
-
-.quick-tile.dashed {
-  border: 1px dashed #c7c7c7;
-  background: transparent;
-}
-
 .main-nav {
   display: grid;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 14px;
 }
 
 .nav-item {
@@ -145,40 +110,39 @@
   font-size: 13px;
 }
 
-.section-title button {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--muted);
-  background: transparent;
-}
-
-.section-title svg {
-  width: 15px;
-  height: 15px;
-}
-
-.source-card {
+.source-manage {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
   min-height: 44px;
   padding: 0 14px;
   border-radius: 10px;
   color: var(--text);
   text-align: left;
   background: #e7e7e7;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 
-.source-card strong {
-  font-size: 22px;
+.source-manage:hover {
+  background: #dadada;
 }
 
-.source-card span {
+.source-manage strong {
+  font-size: 18px;
+}
+
+.source-manage span,
+.source-stats span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.source-stats {
+  display: grid;
+  gap: 6px;
+  padding: 3px 8px 0;
 }
 
 .content-shell {
@@ -193,7 +157,7 @@
 
 .titlebar {
   display: grid;
-  grid-template-columns: auto 232px minmax(0, 1fr) auto;
+  grid-template-columns: 232px minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
   min-width: 0;
@@ -201,7 +165,6 @@
   user-select: none;
 }
 
-.history-controls,
 .window-controls {
   display: inline-flex;
   align-items: center;
@@ -213,7 +176,6 @@
   min-width: 0;
 }
 
-.history-controls button,
 .window-controls button {
   display: grid;
   width: 27px;
@@ -224,12 +186,10 @@
   background: transparent;
 }
 
-.history-controls button:hover,
 .window-controls button:hover {
   background: #eeeeee;
 }
 
-.history-controls svg,
 .window-controls svg {
   width: 17px;
   height: 17px;

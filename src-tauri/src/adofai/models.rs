@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "camelCase")]
 pub struct LibrarySettings {
     pub folders: Vec<String>,
+    #[serde(default)]
+    pub adofai_files: Vec<String>,
     pub theme: ThemeMode,
     #[serde(default = "default_music_volume")]
     pub music_volume: f32,
@@ -25,6 +27,7 @@ impl Default for LibrarySettings {
     fn default() -> Self {
         Self {
             folders: Vec::new(),
+            adofai_files: Vec::new(),
             theme: ThemeMode::Light,
             music_volume: default_music_volume(),
             hit_sound_volume: 0.82,

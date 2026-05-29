@@ -15,6 +15,7 @@ import { FullPlayerOverlay } from "./features/player/FullPlayerOverlay";
 import { MiniPlayer } from "./features/player/MiniPlayer";
 import { cleanDisplayText } from "./lib/text";
 import {
+  addLibraryFile,
   addLibraryFolder,
   buildAudioTimeline,
   getSettings,
@@ -144,9 +145,34 @@ function App() {
     }
   }
 
+  async function chooseAndAddFile() {
+    try {
+      const result = await open({
+        directory: false,
+        multiple: false,
+        filters: [{ name: "ADOFAI 谱面", extensions: ["adofai"] }],
+      });
+      if (typeof result === "string") {
+        await handleAddFile(result);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
   async function handleAddFolder(folder: string) {
     try {
       const next = normalizeSettings(await addLibraryFolder(folder));
+      setSettings(next);
+      await refreshLibrary();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleAddFile(file: string) {
+    try {
+      const next = normalizeSettings(await addLibraryFile(file));
       setSettings(next);
       await refreshLibrary();
     } catch (err) {
@@ -161,6 +187,18 @@ function App() {
     const next = normalizeSettings({
       ...settings,
       folders: settings.folders.filter((item) => item !== folder),
+    });
+    await persistSettings(next);
+    await refreshLibrary();
+  }
+
+  async function handleRemoveFile(file: string) {
+    if (!settings) {
+      return;
+    }
+    const next = normalizeSettings({
+      ...settings,
+      adofaiFiles: settings.adofaiFiles.filter((item) => item !== file),
     });
     await persistSettings(next);
     await refreshLibrary();
@@ -369,9 +407,7 @@ function App() {
         isScanning={isScanning}
         onViewChange={setActiveView}
         onSearchChange={setSearchQuery}
-        onAddFolder={() => void chooseAndAddFolder()}
         onOpenFolderManager={() => setFolderManagerOpen(true)}
-        onScan={() => void refreshLibrary()}
       >
         {error && (
           <div className="notice error">
@@ -397,6 +433,7 @@ function App() {
           onPlayAll={handlePlayAll}
           onToggleFavorite={handleToggleFavorite}
           onAddFolder={() => void chooseAndAddFolder()}
+          onAddFile={() => void chooseAndAddFile()}
           onOpenFolderManager={() => setFolderManagerOpen(true)}
           onScan={() => void refreshLibrary()}
         />
@@ -455,10 +492,13 @@ function App() {
       <FolderManager
         open={folderManagerOpen}
         folders={settings?.folders ?? []}
+        files={settings?.adofaiFiles ?? []}
         isScanning={isScanning}
         onClose={() => setFolderManagerOpen(false)}
         onAddFolder={() => void chooseAndAddFolder()}
+        onAddFile={() => void chooseAndAddFile()}
         onRemoveFolder={(folder) => void handleRemoveFolder(folder)}
+        onRemoveFile={(file) => void handleRemoveFile(file)}
         onScan={() => void refreshLibrary()}
       />
     </>
@@ -466,12 +506,17 @@ function App() {
 }
 
 function errorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
+  const message = err instanceof Error ? err.message : String(err);
+  if (/JSON|control character|line terminator|谱面解析失败|宽松解析|标准 JSON/i.test(message)) {
+    return "这个谱面文件格式异常，暂时无法播放。";
+  }
+  return message;
 }
 
 function normalizeSettings(settings: LibrarySettings): LibrarySettings {
   return {
     ...settings,
+    adofaiFiles: Array.isArray(settings.adofaiFiles) ? settings.adofaiFiles : [],
     theme: "light",
     musicVolume: settings.musicVolume ?? 1,
     hitSoundVolume: settings.hitSoundVolume ?? 0.82,

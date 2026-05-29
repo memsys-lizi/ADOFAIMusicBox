@@ -1,8 +1,8 @@
 mod adofai;
 
 use adofai::commands::{
-    add_library_folder, build_audio_timeline, get_settings, get_track_detail, list_tracks,
-    resolve_asset_path, save_settings, scan_library, AppState,
+    add_library_file, add_library_folder, build_audio_timeline, get_settings, get_track_detail,
+    list_tracks, resolve_asset_path, save_settings, scan_library, AppState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -13,6 +13,7 @@ pub fn run() {
         .manage(AppState::load())
         .invoke_handler(tauri::generate_handler![
             add_library_folder,
+            add_library_file,
             scan_library,
             list_tracks,
             get_track_detail,

@@ -13,6 +13,7 @@ export interface PlayerOpenSourceRect {
 
 export interface LibrarySettings {
   folders: string[];
+  adofaiFiles: string[];
   theme: ThemeMode;
   musicVolume: number;
   hitSoundVolume: number;

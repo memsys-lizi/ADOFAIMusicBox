@@ -1,6 +1,9 @@
 import {
+  ChevronDown,
   CheckCircle2,
   CircleAlert,
+  FileMusic,
+  FolderPlus,
   Grid2X2,
   Heart,
   List,
@@ -8,7 +11,6 @@ import {
   MoreHorizontal,
   Play,
   Plus,
-  Search,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
@@ -33,12 +35,20 @@ interface LibraryViewProps {
   onPlayAll: () => void;
   onToggleFavorite: (track: TrackSummary) => void;
   onAddFolder: () => void;
+  onAddFile: () => void;
   onOpenFolderManager: () => void;
   onScan: () => void;
 }
 
 type LayoutMode = "list" | "grid";
 type SortMode = "title" | "artist" | "duration" | "bpm";
+
+const sortOptions: Array<{ value: SortMode; label: string }> = [
+  { value: "title", label: "按歌名" },
+  { value: "artist", label: "按作曲" },
+  { value: "duration", label: "按时长" },
+  { value: "bpm", label: "按 BPM" },
+];
 
 export function LibraryView({
   activeView,
@@ -58,12 +68,15 @@ export function LibraryView({
   onPlayAll,
   onToggleFavorite,
   onAddFolder,
+  onAddFile,
   onOpenFolderManager,
   onScan,
 }: LibraryViewProps) {
   const [layout, setLayout] = useState<LayoutMode>("list");
   const [sortMode, setSortMode] = useState<SortMode>("title");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
 
   const shownTracks = useMemo(() => {
@@ -136,7 +149,7 @@ export function LibraryView({
         </div>
         <div className="library-summary">
           <span>{shownTracks.length} 首</span>
-          <span>{isScanning ? "正在整理" : "已就绪"}</span>
+          <span>{isScanning ? "扫描中" : "已就绪"}</span>
         </div>
       </header>
 
@@ -145,10 +158,40 @@ export function LibraryView({
           <Play aria-hidden="true" />
           <span>播放</span>
         </button>
-        <button className="pill-button" type="button" onClick={onAddFolder}>
-          <Plus aria-hidden="true" />
-          <span>添加</span>
-        </button>
+        <div className="more-wrap">
+          <button
+            className="pill-button"
+            type="button"
+            onClick={() => setAddMenuOpen((open) => !open)}
+          >
+            <Plus aria-hidden="true" />
+            <span>添加</span>
+          </button>
+          {addMenuOpen && (
+            <div className="more-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  onAddFolder();
+                }}
+              >
+                <FolderPlus aria-hidden="true" />
+                添加文件夹
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  onAddFile();
+                }}
+              >
+                <FileMusic aria-hidden="true" />
+                添加单曲
+              </button>
+            </div>
+          )}
+        </div>
         <div className="more-wrap">
           <button
             className="round-button"
@@ -167,7 +210,7 @@ export function LibraryView({
                   onOpenFolderManager();
                 }}
               >
-                管理文件夹
+                管理来源
               </button>
               <button
                 type="button"
@@ -176,23 +219,36 @@ export function LibraryView({
                   onScan();
                 }}
               >
-                重新整理
+                重新扫描
               </button>
             </div>
           )}
         </div>
 
         <div className="library-tools">
-          <span className="inline-search">
-            <Search aria-hidden="true" />
-            搜索
-          </span>
-          <select value={sortMode} onChange={(event) => setSortMode(event.currentTarget.value as SortMode)}>
-            <option value="title">按歌名</option>
-            <option value="artist">按作曲</option>
-            <option value="duration">按时长</option>
-            <option value="bpm">按 BPM</option>
-          </select>
+          <div className="sort-wrap">
+            <button className="sort-button" type="button" onClick={() => setSortOpen((open) => !open)}>
+              <span>{sortLabel(sortMode)}</span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+            {sortOpen && (
+              <div className="sort-menu">
+                {sortOptions.map((option) => (
+                  <button
+                    className={option.value === sortMode ? "active" : ""}
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setSortMode(option.value);
+                      setSortOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             className={layout === "list" ? "tool-button active" : "tool-button"}
             type="button"
@@ -364,6 +420,10 @@ function compareTracks(a: TrackSummary, b: TrackSummary, mode: SortMode) {
   return left.localeCompare(right, "zh-CN");
 }
 
+function sortLabel(mode: SortMode) {
+  return sortOptions.find((option) => option.value === mode)?.label ?? "按歌名";
+}
+
 function viewTitle(view: AppView) {
   switch (view) {
     case "favorites":
@@ -398,5 +458,5 @@ function emptyDescription(view: AppView, query: string) {
   if (view === "recent") {
     return "播放过的音乐会自动出现在这里。";
   }
-  return "选择包含 .adofai 谱面的文件夹，软件会自动整理音乐和封面。";
+  return "选择包含 .adofai 谱面的文件夹，软件会自动扫描音乐和封面。";
 }
