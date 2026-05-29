@@ -45,7 +45,7 @@ struct HoldSoundChange {
     end: String,
     mid: String,
     mid_type: String,
-    mid_delay_beats: f64,
+    mid_delay_sec: f64,
     mid_timing: String,
     volume: f32,
 }
@@ -233,7 +233,7 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
     }
 
     let mut is_ccw = false;
-    let mut speed = 1.0;
+    let mut speed: f64 = 1.0;
     let mut planets = 2;
     let mut radius_carry_extra = 0.0;
 
@@ -311,13 +311,15 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
                     });
                 }
                 Some("SetHoldSound") => {
+                    let mid_delay_beats = value_as_f64(event.get("holdMidSoundDelay"), 0.5);
+                    let mid_delay_sec = mid_delay_beats * (60.0 / base_bpm) / speed.max(0.001);
                     floors[index].set_hold_sound = Some(HoldSoundChange {
-                        start: value_as_string(event.get("holdStartSound"), "None"),
-                        loop_sound: value_as_string(event.get("holdLoopSound"), "None"),
-                        end: value_as_string(event.get("holdEndSound"), "None"),
+                        start: value_as_string(event.get("holdStartSound"), "Fuse"),
+                        loop_sound: value_as_string(event.get("holdLoopSound"), "Fuse"),
+                        end: value_as_string(event.get("holdEndSound"), "Fuse"),
                         mid: value_as_string(event.get("holdMidSound"), "None"),
                         mid_type: value_as_string(event.get("holdMidSoundType"), "Once"),
-                        mid_delay_beats: value_as_f64(event.get("holdMidSoundDelay"), 0.5),
+                        mid_delay_sec,
                         mid_timing: value_as_string(
                             event.get("holdMidSoundTimingRelativeTo"),
                             "End",
@@ -514,14 +516,14 @@ fn append_hit_events(
     let mut has_set_midspin_sound = false;
     let mut volume = default_volume;
     let mut hold_change = HoldSoundChange {
-        start: "None".to_string(),
-        loop_sound: "None".to_string(),
-        end: "None".to_string(),
+        start: "Fuse".to_string(),
+        loop_sound: "Fuse".to_string(),
+        end: "Fuse".to_string(),
         mid: "None".to_string(),
         mid_type: "Once".to_string(),
-        mid_delay_beats: 0.5,
+        mid_delay_sec: 0.5 * (60.0 / bpm),
         mid_timing: "End".to_string(),
-        volume: default_volume,
+        volume: 1.0,
     };
 
     for k in 1..floors.len() {
@@ -593,7 +595,7 @@ fn append_hit_events(
             });
         }
 
-        if floor.hold_length > -1 && k + 1 < floors.len() {
+        if floor.hold_length > -1 && !floor.mid_spin && k + 1 < floors.len() {
             append_hold_events(timeline, floors, k, &hold_change, pitch, song_start_delay);
         }
 
@@ -661,7 +663,7 @@ fn append_hold_events(
         });
     }
     if hold_change.mid != "None" {
-        let delay = hold_change.mid_delay_beats / pitch;
+        let delay = hold_change.mid_delay_sec / pitch;
         let mid_start = (start - mid_offset).max(0.0);
         let mid_end = (end - mid_offset).max(0.0);
         if hold_change.mid_type == "Repeat" && delay > 0.0 {
