@@ -174,6 +174,7 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
         typeof event.endTimeSec === "number" &&
         event.endTimeSec > event.timeSec;
       const delta = event.timeSec - now;
+      const targetTime = startedAtRef.current + event.timeSec;
 
       if (isLoop) {
         if ((event.endTimeSec ?? 0) <= now || delta > LOOKAHEAD_SECONDS) {
@@ -189,7 +190,7 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
         return;
       }
 
-      const when = context.currentTime + Math.max(0, delta);
+      const when = Math.max(context.currentTime, targetTime);
       const source = context.createBufferSource();
       const gain = context.createGain();
       source.buffer = buffer;
@@ -201,7 +202,10 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
       if (isLoop) {
         const elapsed = Math.max(0, now - event.timeSec) * Math.max(0.05, event.pitch);
         const offset = buffer.duration > 0 ? elapsed % buffer.duration : 0;
-        const stopAt = context.currentTime + Math.max(0, (event.endTimeSec ?? now) - now);
+        const stopAt = Math.max(
+          context.currentTime,
+          startedAtRef.current + (event.endTimeSec ?? now),
+        );
         source.loop = true;
         source.start(when, offset);
         source.stop(stopAt);
@@ -212,7 +216,7 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
           event.endTimeSec > event.timeSec &&
           event.endTimeSec > now
         ) {
-          source.stop(context.currentTime + Math.max(0, event.endTimeSec - now));
+          source.stop(Math.max(context.currentTime, startedAtRef.current + event.endTimeSec));
         }
       }
 

@@ -289,9 +289,7 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
                     };
                 }
                 Some("MultiPlanet") => {
-                    planets = value_as_f64(event.get("planets"), planets as f64)
-                        .round()
-                        .clamp(2.0, 3.0) as i32;
+                    planets = planet_count(event.get("planets"), planets);
                     if index > 0 && floors[index - 1].mid_spin {
                         floors[index - 1].num_planets = planets;
                     }
@@ -337,6 +335,24 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
         floors[index].is_ccw = is_ccw;
         floors[index].num_planets = planets;
         floors[index].extra_beats += radius_carry_extra;
+    }
+}
+
+fn planet_count(value: Option<&Value>, fallback: i32) -> i32 {
+    match value {
+        Some(Value::Number(number)) => number
+            .as_f64()
+            .map(|value| value.round().clamp(2.0, 3.0) as i32)
+            .unwrap_or(fallback),
+        Some(Value::String(text)) => {
+            let normalized = text.trim().to_ascii_lowercase();
+            match normalized.as_str() {
+                "twoplanets" | "two" | "2" => 2,
+                "threeplanets" | "three" | "3" => 3,
+                _ => fallback,
+            }
+        }
+        _ => fallback,
     }
 }
 
@@ -504,6 +520,12 @@ fn append_hit_events(
 
     for k in 1..floors.len() {
         let floor = &floors[k];
+        let floor_entry_time = event_time(
+            floor.entry_time_pitch_adj,
+            timeline.song_offset_ms,
+            pitch,
+            song_start_delay,
+        );
         if let Some(change) = &floor.set_hitsound {
             if change.game_sound == "Midspin" {
                 use_midspin_sound = true;
@@ -522,6 +544,7 @@ fn append_hit_events(
         }
 
         let previous = &floors[k - 1];
+        let mut floor_hit_time = None;
         if floor.hold_length <= -1
             && previous.hold_length <= -1
             && !(previous.mid_spin && k >= 2 && floors[k - 2].hold_length > -1)
@@ -534,14 +557,10 @@ fn append_hit_events(
                 hit_sound.clone()
             };
             if sound != "None" && !floor.mid_spin {
+                let time_sec = (floor_entry_time - hit_sound_offset(&sound)).max(0.0);
+                floor_hit_time = Some(time_sec);
                 timeline.hit_events.push(HitEvent {
-                    time_sec: (event_time(
-                        floor.entry_time_pitch_adj,
-                        timeline.song_offset_ms,
-                        pitch,
-                        song_start_delay,
-                    ) - hit_sound_offset(&sound))
-                    .max(0.0),
+                    time_sec,
                     end_time_sec: None,
                     sound_name: format!("snd{sound}"),
                     volume,
@@ -554,12 +573,7 @@ fn append_hit_events(
 
         if floor.num_planets != previous.num_planets {
             timeline.hit_events.push(HitEvent {
-                time_sec: event_time(
-                    floor.entry_time_pitch_adj,
-                    timeline.song_offset_ms,
-                    pitch,
-                    song_start_delay,
-                ),
+                time_sec: floor_hit_time.unwrap_or(floor_entry_time),
                 end_time_sec: None,
                 sound_name: if floor.num_planets > previous.num_planets {
                     "sndVehiclePositive".to_string()
