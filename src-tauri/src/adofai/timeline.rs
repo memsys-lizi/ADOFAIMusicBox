@@ -1,7 +1,7 @@
 use super::models::{AudioTimeline, HitEvent};
 use super::parser::{
-    array_at, event_floor, event_type, number_setting, parse_level_file, settings_map,
-    value_as_f64, value_as_string,
+    array_at, event_floor, event_is_active, event_type, number_setting, parse_level_file,
+    settings_map, value_as_f64, value_as_string,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -220,6 +220,9 @@ impl Floor {
 fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
     let mut by_floor: BTreeMap<usize, Vec<&Value>> = BTreeMap::new();
     for event in array_at(root, "actions") {
+        if !event_is_active(event) {
+            continue;
+        }
         by_floor.entry(event_floor(event)).or_default().push(event);
     }
 
@@ -486,6 +489,7 @@ fn append_hit_events(
     let mut hit_sound = default_hitsound;
     let mut midspin_sound = hit_sound.clone();
     let mut use_midspin_sound = false;
+    let mut has_set_midspin_sound = false;
     let mut volume = default_volume;
     let mut hold_change = HoldSoundChange {
         start: "None".to_string(),
@@ -506,7 +510,10 @@ fn append_hit_events(
                 midspin_sound = change.hitsound.clone();
             } else {
                 hit_sound = change.hitsound.clone();
-                midspin_sound = change.hitsound.clone();
+                if !has_set_midspin_sound {
+                    has_set_midspin_sound = true;
+                    midspin_sound = change.hitsound.clone();
+                }
             }
             volume = change.volume;
         }
@@ -744,6 +751,9 @@ fn append_play_sound_events(
 ) {
     let parent = level_path.parent().unwrap_or_else(|| Path::new(""));
     for event in array_at(root, "actions") {
+        if !event_is_active(event) {
+            continue;
+        }
         if event_type(event) != Some("PlaySound") {
             continue;
         }

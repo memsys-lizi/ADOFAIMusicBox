@@ -221,6 +221,17 @@ pub fn event_type(event: &Value) -> Option<&str> {
     event.get("eventType").and_then(Value::as_str)
 }
 
+pub fn event_is_active(event: &Value) -> bool {
+    event
+        .get("active")
+        .and_then(|value| match value {
+            Value::Bool(value) => Some(*value),
+            Value::String(text) => text.parse::<bool>().ok(),
+            _ => None,
+        })
+        .unwrap_or(true)
+}
+
 pub fn event_floor(event: &Value) -> usize {
     event
         .get("floor")
