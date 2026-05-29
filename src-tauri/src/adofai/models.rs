@@ -101,7 +101,6 @@ pub struct AudioTimeline {
     pub hit_events: Vec<HitEvent>,
     pub play_sound_events: Vec<HitEvent>,
     pub hold_sound_events: Vec<HitEvent>,
-    pub countdown_events: Vec<HitEvent>,
     pub warnings: Vec<String>,
 }
 
@@ -109,6 +108,7 @@ pub struct AudioTimeline {
 #[serde(rename_all = "camelCase")]
 pub struct HitEvent {
     pub time_sec: f64,
+    pub end_time_sec: Option<f64>,
     pub sound_name: String,
     pub volume: f32,
     pub pitch: f32,

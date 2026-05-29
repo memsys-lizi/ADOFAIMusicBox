@@ -66,6 +66,16 @@ pub fn build_timeline_from_root(
     let bpm = number_setting(&settings, "bpm", 100.0).max(1.0);
     let offset_ms = number_setting(&settings, "offset", 0.0);
     let pitch = (number_setting(&settings, "pitch", 100.0) / 100.0).max(0.01);
+    let countdown_ticks = number_setting(&settings, "countdownTicks", 4.0);
+    let countdown_speed_multiplier =
+        number_setting(&settings, "countdownSpeedMultiplier", 1.0).max(0.01);
+    let adjusted_countdown_ticks = countdown_ticks / countdown_speed_multiplier;
+    let separate_countdown_time = bool_setting(&settings, "separateCountdownTime", true);
+    let song_start_delay = if separate_countdown_time {
+        (60.0 / bpm) * adjusted_countdown_ticks / pitch
+    } else {
+        0.0
+    };
     let default_hitsound = string_setting_or(&settings, "hitsound", "Kick");
     let hit_volume = (number_setting(&settings, "hitsoundVolume", 100.0) / 100.0) as f32;
     let mut warnings = Vec::new();
@@ -73,20 +83,29 @@ pub fn build_timeline_from_root(
     let angles = read_angles(root, &mut warnings)?;
     let mut floors = instantiate_floors(&angles);
     apply_floor_events(root, &mut floors, bpm);
-    calculate_entry_times(&mut floors, bpm, pitch);
+    if let Some(first) = floors.first_mut() {
+        first.countdown_ticks = countdown_ticks as i32;
+    }
+    calculate_entry_times(&mut floors, bpm, pitch, adjusted_countdown_ticks);
 
     let mut timeline = AudioTimeline {
         song_offset_ms: offset_ms,
         pitch,
         duration: floors
             .last()
-            .map(|floor| event_time(floor.entry_time_pitch_adj, offset_ms, pitch))
+            .map(|floor| {
+                event_time(
+                    floor.entry_time_pitch_adj,
+                    offset_ms,
+                    pitch,
+                    song_start_delay,
+                )
+            })
             .unwrap_or(0.0)
             .max(0.0),
         hit_events: Vec::new(),
         play_sound_events: Vec::new(),
         hold_sound_events: Vec::new(),
-        countdown_events: Vec::new(),
         warnings,
     };
 
@@ -98,6 +117,8 @@ pub fn build_timeline_from_root(
             &floors,
             bpm,
             pitch,
+            song_start_delay,
+            countdown_speed_multiplier,
             default_hitsound,
             hit_volume,
         );
@@ -113,6 +134,17 @@ fn string_setting_or(settings: &BTreeMap<String, Value>, key: &str, fallback: &s
         .filter(|value| !value.is_empty())
         .unwrap_or(fallback)
         .to_string()
+}
+
+fn bool_setting(settings: &BTreeMap<String, Value>, key: &str, fallback: bool) -> bool {
+    settings
+        .get(key)
+        .and_then(|value| match value {
+            Value::Bool(value) => Some(*value),
+            Value::String(text) => text.parse::<bool>().ok(),
+            _ => None,
+        })
+        .unwrap_or(fallback)
 }
 
 fn read_angles(root: &Value, warnings: &mut Vec<String>) -> Result<Vec<f64>, String> {
@@ -350,18 +382,24 @@ fn speed_after_event(event: &Value, base_bpm: f64, current_speed: f64) -> f64 {
     }
 }
 
-fn calculate_entry_times(floors: &mut [Floor], bpm: f64, pitch: f64) {
+fn calculate_entry_times(
+    floors: &mut [Floor],
+    bpm: f64,
+    pitch: f64,
+    adjusted_countdown_ticks: f64,
+) {
     if floors.len() <= 1 {
         return;
     }
     let crotchet = 60.0 / bpm;
-    let mut time = time_between_angles(
-        floors[0].entry_angle,
-        floors[0].exit_angle,
-        floors[0].speed,
-        bpm,
-        !floors[0].is_ccw,
-    );
+    let mut time = crotchet * (adjusted_countdown_ticks - 1.0).max(0.0)
+        + time_between_angles(
+            floors[0].entry_angle,
+            floors[0].exit_angle,
+            floors[0].speed,
+            bpm,
+            !floors[0].is_ccw,
+        );
     floors[0].entry_time = 0.0;
     floors[1].entry_time = time;
     floors[1].entry_time_pitch_adj = time / pitch;
@@ -419,6 +457,8 @@ fn append_hit_events(
     floors: &[Floor],
     bpm: f64,
     pitch: f64,
+    song_start_delay: f64,
+    countdown_speed_multiplier: f64,
     default_hitsound: String,
     default_volume: f32,
 ) {
@@ -467,11 +507,14 @@ fn append_hit_events(
             };
             if sound != "None" && !floor.mid_spin {
                 timeline.hit_events.push(HitEvent {
-                    time_sec: event_time(
+                    time_sec: (event_time(
                         floor.entry_time_pitch_adj,
                         timeline.song_offset_ms,
                         pitch,
-                    ),
+                        song_start_delay,
+                    ) - hit_sound_offset(&sound))
+                    .max(0.0),
+                    end_time_sec: None,
                     sound_name: format!("snd{sound}"),
                     volume,
                     pitch: 1.0,
@@ -483,7 +526,13 @@ fn append_hit_events(
 
         if floor.num_planets != previous.num_planets {
             timeline.hit_events.push(HitEvent {
-                time_sec: event_time(floor.entry_time_pitch_adj, timeline.song_offset_ms, pitch),
+                time_sec: event_time(
+                    floor.entry_time_pitch_adj,
+                    timeline.song_offset_ms,
+                    pitch,
+                    song_start_delay,
+                ),
+                end_time_sec: None,
                 sound_name: if floor.num_planets > previous.num_planets {
                     "sndVehiclePositive".to_string()
                 } else {
@@ -497,15 +546,23 @@ fn append_hit_events(
         }
 
         if floor.hold_length > -1 && k + 1 < floors.len() {
-            append_hold_events(timeline, floors, k, &hold_change, pitch);
+            append_hold_events(timeline, floors, k, &hold_change, pitch, song_start_delay);
         }
 
         if floor.freeroam_sound_on.is_some() || floor.freeroam_sound_off.is_some() {
-            append_freeroam_events(timeline, floor, bpm, pitch, volume);
+            append_freeroam_events(
+                timeline,
+                floor,
+                bpm,
+                pitch,
+                volume,
+                song_start_delay,
+                countdown_speed_multiplier,
+            );
         }
     }
 
-    append_play_sound_events(timeline, root, level_path, floors, pitch);
+    append_play_sound_events(timeline, root, level_path, floors, pitch, song_start_delay);
 }
 
 fn append_hold_events(
@@ -514,15 +571,29 @@ fn append_hold_events(
     index: usize,
     hold_change: &HoldSoundChange,
     pitch: f64,
+    song_start_delay: f64,
 ) {
     let floor = &floors[index];
     let next = &floors[index + 1];
-    let start = event_time(floor.entry_time_pitch_adj, timeline.song_offset_ms, pitch);
-    let end = event_time(next.entry_time_pitch_adj, timeline.song_offset_ms, pitch);
+    let start = event_time(
+        floor.entry_time_pitch_adj,
+        timeline.song_offset_ms,
+        pitch,
+        song_start_delay,
+    );
+    let end = event_time(
+        next.entry_time_pitch_adj,
+        timeline.song_offset_ms,
+        pitch,
+        song_start_delay,
+    );
+    let mid_offset = hold_mid_offset(&hold_change.mid);
+    let end_offset = hold_end_offset(&hold_change.end);
 
     if hold_change.start != "None" {
         timeline.hold_sound_events.push(HitEvent {
             time_sec: start,
+            end_time_sec: None,
             sound_name: format!("sndHeldbeatStart{}", hold_change.start),
             volume: hold_change.volume,
             pitch: 1.0,
@@ -533,6 +604,7 @@ fn append_hold_events(
     if hold_change.loop_sound != "None" {
         timeline.hold_sound_events.push(HitEvent {
             time_sec: start,
+            end_time_sec: Some(end),
             sound_name: format!("sndHeldbeatLoop{}", hold_change.loop_sound),
             volume: hold_change.volume,
             pitch: 1.0,
@@ -542,15 +614,18 @@ fn append_hold_events(
     }
     if hold_change.mid != "None" {
         let delay = hold_change.mid_delay_beats / pitch;
+        let mid_start = (start - mid_offset).max(0.0);
+        let mid_end = (end - mid_offset).max(0.0);
         if hold_change.mid_type == "Repeat" && delay > 0.0 {
             let mut t = if hold_change.mid_timing == "Start" {
-                start + delay
+                mid_start + delay
             } else {
-                end - delay
+                mid_end - delay
             };
-            while t > start && t < end {
+            while t > mid_start && t < mid_end {
                 timeline.hold_sound_events.push(HitEvent {
                     time_sec: t,
+                    end_time_sec: None,
                     sound_name: format!("sndHeldbeatMid{}", hold_change.mid),
                     volume: hold_change.volume,
                     pitch: 1.0,
@@ -565,13 +640,14 @@ fn append_hold_events(
             }
         } else {
             let t = if hold_change.mid_timing == "Start" {
-                start + delay
+                mid_start + delay
             } else {
-                end - delay
+                mid_end - delay
             };
-            if t > start && t < end {
+            if t > mid_start && t < mid_end {
                 timeline.hold_sound_events.push(HitEvent {
                     time_sec: t,
+                    end_time_sec: None,
                     sound_name: format!("sndHeldbeatMid{}", hold_change.mid),
                     volume: hold_change.volume,
                     pitch: 1.0,
@@ -583,7 +659,8 @@ fn append_hold_events(
     }
     if hold_change.end != "None" {
         timeline.hold_sound_events.push(HitEvent {
-            time_sec: end,
+            time_sec: (end - end_offset).max(0.0),
+            end_time_sec: None,
             sound_name: format!("sndHeldbeatEnd{}", hold_change.end),
             volume: hold_change.volume,
             pitch: 1.0,
@@ -599,10 +676,13 @@ fn append_freeroam_events(
     bpm: f64,
     pitch: f64,
     volume: f32,
+    song_start_delay: f64,
+    countdown_speed_multiplier: f64,
 ) {
     let mut index = 0;
     let mut beat = 0.0;
-    while beat < floor.extra_beats + 1.0 {
+    while beat < floor.extra_beats - floor.countdown_ticks as f64 / countdown_speed_multiplier + 1.0
+    {
         let sound = if index % 2 == 0 {
             floor.freeroam_sound_on.as_ref()
         } else {
@@ -610,10 +690,16 @@ fn append_freeroam_events(
         };
         if let Some(sound) = sound {
             if sound != "None" {
-                let time = event_time(floor.entry_time_pitch_adj, timeline.song_offset_ms, pitch)
-                    + beat * (60.0 / bpm) / floor.speed / pitch;
+                let time = event_time(
+                    floor.entry_time_pitch_adj,
+                    timeline.song_offset_ms,
+                    pitch,
+                    song_start_delay,
+                ) + beat * (60.0 / bpm) / floor.speed / pitch
+                    - hit_sound_offset(sound);
                 timeline.hit_events.push(HitEvent {
-                    time_sec: time,
+                    time_sec: time.max(0.0),
+                    end_time_sec: None,
                     sound_name: format!("snd{sound}"),
                     volume,
                     pitch: 1.0,
@@ -633,6 +719,7 @@ fn append_play_sound_events(
     level_path: &Path,
     floors: &[Floor],
     pitch: f64,
+    song_start_delay: f64,
 ) {
     let parent = level_path.parent().unwrap_or_else(|| Path::new(""));
     for event in array_at(root, "actions") {
@@ -640,22 +727,40 @@ fn append_play_sound_events(
             continue;
         }
         let floor = event_floor(event);
-        let floor_time = timeline.song_offset_ms / 1000.0 / pitch
-            + floors
-                .get(floor)
-                .map(|floor| floor.entry_time_pitch_adj)
-                .unwrap_or_default();
+        let floor_time = floors
+            .get(floor)
+            .map(|floor| {
+                event_time(
+                    floor.entry_time_pitch_adj,
+                    timeline.song_offset_ms,
+                    pitch,
+                    song_start_delay,
+                )
+            })
+            .unwrap_or_default();
         let sound = value_as_string(event.get("hitsound"), "Kick");
         let offset = value_as_f64(event.get("offset"), 0.0) / 1000.0;
         let play_pitch = (value_as_f64(event.get("pitch"), 100.0) / 100.0) as f32;
         let volume = (value_as_f64(event.get("hitsoundVolume"), 100.0) / 100.0) as f32;
+        let duration = value_as_f64(event.get("playDuration"), 0.0) / 1000.0 / pitch;
+        let sound_offset = if is_builtin_hitsound(&sound) {
+            hit_sound_offset(&sound)
+        } else {
+            0.0
+        };
+        let time_sec = (floor_time - offset / pitch - sound_offset).max(0.0);
         let sound_name = if is_builtin_hitsound(&sound) {
             format!("snd{sound}")
         } else {
             parent.join(&sound).to_string_lossy().to_string()
         };
         timeline.play_sound_events.push(HitEvent {
-            time_sec: (floor_time - offset / pitch).max(0.0),
+            time_sec,
+            end_time_sec: if duration > 0.0 {
+                Some(time_sec + duration)
+            } else {
+                None
+            },
             sound_name,
             volume,
             pitch: play_pitch,
@@ -698,8 +803,37 @@ fn is_builtin_hitsound(sound: &str) -> bool {
     )
 }
 
-fn event_time(entry_time_pitch_adj: f64, offset_ms: f64, pitch: f64) -> f64 {
-    (entry_time_pitch_adj + offset_ms / 1000.0 / pitch).max(0.0)
+fn hit_sound_offset(sound: &str) -> f64 {
+    match sound {
+        "Shaker" => 0.015,
+        "ShakerLoud" => 0.015,
+        "Hammer" => 0.03,
+        "Stick" => 0.021,
+        "Squareshot" => 0.05,
+        "ClapHit" => 0.036,
+        "ClapHitEcho" => 0.116,
+        "ReverbClap" => 0.026,
+        _ => 0.0,
+    }
+}
+
+fn hold_mid_offset(sound: &str) -> f64 {
+    match sound {
+        "Fuse" => 0.107,
+        "SingSing" => 0.212,
+        _ => 0.0,
+    }
+}
+
+fn hold_end_offset(sound: &str) -> f64 {
+    match sound {
+        "Fuse" => 0.099,
+        _ => 0.0,
+    }
+}
+
+fn event_time(entry_time_pitch_adj: f64, offset_ms: f64, pitch: f64, song_start_delay: f64) -> f64 {
+    (entry_time_pitch_adj + offset_ms / 1000.0 / pitch - song_start_delay).max(0.0)
 }
 
 fn time_between_angles(

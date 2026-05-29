@@ -22,30 +22,32 @@ interface AdoAudioApi {
 }
 
 const BUILTIN_EXTENSIONS = [".wav", ".ogg", ".mp3"];
-const LOOKAHEAD_SECONDS = 0.22;
-const SCHEDULER_INTERVAL_MS = 60;
+const LOOKAHEAD_SECONDS = 0.16;
+const LATE_TOLERANCE_SECONDS = 0.025;
+const SCHEDULER_INTERVAL_MS = 25;
 
 export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
+  const mainGainRef = useRef<GainNode | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const mainBufferRef = useRef<AudioBuffer | null>(null);
   const timelineRef = useRef<AudioTimeline | null>(null);
+  const mainBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const soundBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const scheduledRef = useRef<Set<string>>(new Set());
-  const buffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const intervalRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
+  const positionRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const durationRef = useRef(0);
+  const playingRef = useRef(false);
+  const sessionRef = useRef(0);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hitSoundsEnabled, setHitSoundsEnabled] = useState(true);
   const [playSoundsEnabled, setPlaySoundsEnabled] = useState(true);
-
-  const ensureAudio = useCallback(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.preload = "auto";
-    }
-    return audioRef.current;
-  }, []);
 
   const ensureContext = useCallback(() => {
     if (!contextRef.current) {
@@ -54,90 +56,26 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     return contextRef.current;
   }, []);
 
-  const decodeSound = useCallback(
-    async (soundName: string): Promise<AudioBuffer | null> => {
-      const existing = buffersRef.current.get(soundName);
-      if (existing) {
-        return existing;
-      }
-
-      const candidates = soundName.includes("\\") || soundName.includes("/")
-        ? [toAssetUrl(soundName)].filter((value): value is string => Boolean(value))
-        : BUILTIN_EXTENSIONS.map((ext) => `/audio/${soundName}${ext}`);
-
-      const context = ensureContext();
-      for (const url of candidates) {
-        try {
-          const response = await fetch(url);
-          if (!response.ok) {
-            continue;
-          }
-          const data = await response.arrayBuffer();
-          const buffer = await context.decodeAudioData(data.slice(0));
-          buffersRef.current.set(soundName, buffer);
-          return buffer;
-        } catch {
-          continue;
-        }
-      }
-      return null;
-    },
-    [ensureContext],
-  );
-
-  const scheduleEvent = useCallback(
-    async (event: HitEvent, multiplier: number, namespace: string) => {
-      const audio = ensureAudio();
-      const context = ensureContext();
-      const key = `${namespace}:${event.sourceFloor}:${event.kind}:${event.timeSec}`;
-      if (scheduledRef.current.has(key)) {
-        return;
-      }
-      const delta = event.timeSec - audio.currentTime;
-      if (delta < -0.05 || delta > LOOKAHEAD_SECONDS) {
-        return;
-      }
-      const buffer = await decodeSound(event.soundName);
-      if (!buffer) {
-        scheduledRef.current.add(key);
-        return;
-      }
-      const source = context.createBufferSource();
-      const gain = context.createGain();
-      source.buffer = buffer;
-      source.playbackRate.value = Math.max(0.05, event.pitch);
-      gain.gain.value = Math.max(0, event.volume * multiplier);
-      source.connect(gain);
-      gain.connect(context.destination);
-      source.start(context.currentTime + Math.max(0, delta));
-      scheduledRef.current.add(key);
-    },
-    [decodeSound, ensureAudio, ensureContext],
-  );
-
-  const runScheduler = useCallback(() => {
-    const timeline = timelineRef.current;
-    if (!timeline) {
-      return;
+  const ensureMainGain = useCallback(() => {
+    const context = ensureContext();
+    if (!mainGainRef.current) {
+      mainGainRef.current = context.createGain();
+      mainGainRef.current.gain.value = 1;
+      mainGainRef.current.connect(context.destination);
     }
-    const hitEvents = hitSoundsEnabled
-      ? [...timeline.hitEvents, ...timeline.holdSoundEvents]
-      : [];
-    for (const event of hitEvents) {
-      void scheduleEvent(event, options.hitSoundVolume, "hit");
+    return mainGainRef.current;
+  }, [ensureContext]);
+
+  const transportTime = useCallback(() => {
+    const context = contextRef.current;
+    if (playingRef.current && context) {
+      return Math.min(
+        durationRef.current,
+        Math.max(0, context.currentTime - startedAtRef.current),
+      );
     }
-    if (playSoundsEnabled) {
-      for (const event of timeline.playSoundEvents) {
-        void scheduleEvent(event, options.playSoundVolume, "play");
-      }
-    }
-  }, [
-    hitSoundsEnabled,
-    options.hitSoundVolume,
-    options.playSoundVolume,
-    playSoundsEnabled,
-    scheduleEvent,
-  ]);
+    return Math.min(durationRef.current, Math.max(0, positionRef.current));
+  }, []);
 
   const stopScheduler = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -146,84 +84,299 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     }
   }, []);
 
+  const stopSource = useCallback(() => {
+    const source = sourceRef.current;
+    if (!source) {
+      return;
+    }
+    source.onended = null;
+    try {
+      source.stop();
+    } catch {
+      // The source may already have ended.
+    }
+    source.disconnect();
+    sourceRef.current = null;
+  }, []);
+
+  const decodeUrl = useCallback(
+    async (url: string, cache: Map<string, AudioBuffer>, cacheKey = url) => {
+      const existing = cache.get(cacheKey);
+      if (existing) {
+        return existing;
+      }
+      const context = ensureContext();
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("音频文件无法读取");
+      }
+      const bytes = await response.arrayBuffer();
+      const buffer = await context.decodeAudioData(bytes.slice(0));
+      cache.set(cacheKey, buffer);
+      return buffer;
+    },
+    [ensureContext],
+  );
+
+  const decodeSound = useCallback(
+    async (soundName: string): Promise<AudioBuffer | null> => {
+      const existing = soundBuffersRef.current.get(soundName);
+      if (existing) {
+        return existing;
+      }
+
+      const candidates =
+        soundName.includes("\\") || soundName.includes("/")
+          ? [toAssetUrl(soundName)].filter((value): value is string => Boolean(value))
+          : BUILTIN_EXTENSIONS.map((ext) => `/audio/${soundName}${ext}`);
+
+      for (const url of candidates) {
+        try {
+          return await decodeUrl(url, soundBuffersRef.current, soundName);
+        } catch {
+          continue;
+        }
+      }
+      return null;
+    },
+    [decodeUrl],
+  );
+
+  const preloadTimelineSounds = useCallback(
+    async (timeline: AudioTimeline) => {
+      const soundNames = new Set<string>();
+      for (const event of [
+        ...timeline.hitEvents,
+        ...timeline.holdSoundEvents,
+        ...timeline.playSoundEvents,
+      ]) {
+        soundNames.add(event.soundName);
+      }
+      await Promise.all([...soundNames].map((soundName) => decodeSound(soundName)));
+    },
+    [decodeSound],
+  );
+
+  const scheduleEvent = useCallback(
+    async (event: HitEvent, multiplier: number, namespace: string, now: number) => {
+      const context = ensureContext();
+      const session = sessionRef.current;
+      const key = `${session}:${namespace}:${event.sourceFloor}:${event.kind}:${event.timeSec}`;
+      if (scheduledRef.current.has(key)) {
+        return;
+      }
+
+      const isLoop =
+        event.kind === "hold-loop" &&
+        typeof event.endTimeSec === "number" &&
+        event.endTimeSec > event.timeSec;
+      const delta = event.timeSec - now;
+
+      if (isLoop) {
+        if ((event.endTimeSec ?? 0) <= now || delta > LOOKAHEAD_SECONDS) {
+          return;
+        }
+      } else if (delta < -LATE_TOLERANCE_SECONDS || delta > LOOKAHEAD_SECONDS) {
+        return;
+      }
+
+      const buffer = await decodeSound(event.soundName);
+      if (!buffer || session !== sessionRef.current) {
+        scheduledRef.current.add(key);
+        return;
+      }
+
+      const when = context.currentTime + Math.max(0, delta);
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      source.buffer = buffer;
+      source.playbackRate.value = Math.max(0.05, event.pitch);
+      gain.gain.value = Math.max(0, event.volume * multiplier);
+      source.connect(gain);
+      gain.connect(context.destination);
+
+      if (isLoop) {
+        const elapsed = Math.max(0, now - event.timeSec) * Math.max(0.05, event.pitch);
+        const offset = buffer.duration > 0 ? elapsed % buffer.duration : 0;
+        const stopAt = context.currentTime + Math.max(0, (event.endTimeSec ?? now) - now);
+        source.loop = true;
+        source.start(when, offset);
+        source.stop(stopAt);
+      } else {
+        source.start(when);
+        if (
+          typeof event.endTimeSec === "number" &&
+          event.endTimeSec > event.timeSec &&
+          event.endTimeSec > now
+        ) {
+          source.stop(context.currentTime + Math.max(0, event.endTimeSec - now));
+        }
+      }
+
+      scheduledRef.current.add(key);
+    },
+    [decodeSound, ensureContext],
+  );
+
+  const runScheduler = useCallback(() => {
+    const timeline = timelineRef.current;
+    if (!timeline || !playingRef.current) {
+      return;
+    }
+    const now = transportTime();
+    if (hitSoundsEnabled) {
+      for (const event of [...timeline.hitEvents, ...timeline.holdSoundEvents]) {
+        void scheduleEvent(event, options.hitSoundVolume, "hit", now);
+      }
+    }
+    if (playSoundsEnabled) {
+      for (const event of timeline.playSoundEvents) {
+        void scheduleEvent(event, options.playSoundVolume, "play", now);
+      }
+    }
+  }, [
+    hitSoundsEnabled,
+    options.hitSoundVolume,
+    options.playSoundVolume,
+    playSoundsEnabled,
+    scheduleEvent,
+    transportTime,
+  ]);
+
   const startScheduler = useCallback(() => {
     stopScheduler();
     runScheduler();
     intervalRef.current = window.setInterval(runScheduler, SCHEDULER_INTERVAL_MS);
   }, [runScheduler, stopScheduler]);
 
-  const syncClock = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      setCurrentTime(audio.currentTime);
-      setDuration(Number.isFinite(audio.duration) ? audio.duration : timelineRef.current?.duration ?? 0);
-    }
-    frameRef.current = window.requestAnimationFrame(syncClock);
-  }, []);
+  const finishPlayback = useCallback(() => {
+    stopScheduler();
+    sourceRef.current = null;
+    positionRef.current = durationRef.current;
+    playingRef.current = false;
+    setCurrentTime(durationRef.current);
+    setIsPlaying(false);
+  }, [stopScheduler]);
+
+  const startSource = useCallback(
+    (position: number) => {
+      const context = ensureContext();
+      const buffer = mainBufferRef.current;
+      const timeline = timelineRef.current;
+      if (!buffer || !timeline) {
+        throw new Error("当前曲目还没有加载");
+      }
+
+      stopSource();
+      const pitch = Math.max(0.05, timeline.pitch);
+      const clampedPosition = Math.min(durationRef.current, Math.max(0, position));
+      const rawOffset = Math.min(buffer.duration, clampedPosition * pitch);
+      if (rawOffset >= buffer.duration) {
+        finishPlayback();
+        return;
+      }
+
+      sessionRef.current += 1;
+      scheduledRef.current.clear();
+      positionRef.current = clampedPosition;
+      startedAtRef.current = context.currentTime - clampedPosition;
+
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = pitch;
+      source.connect(ensureMainGain());
+      source.onended = () => {
+        if (sourceRef.current === source) {
+          finishPlayback();
+        }
+      };
+      source.start(context.currentTime, rawOffset);
+      sourceRef.current = source;
+      playingRef.current = true;
+      setIsPlaying(true);
+      startScheduler();
+    },
+    [ensureContext, ensureMainGain, finishPlayback, startScheduler, stopSource],
+  );
 
   const load = useCallback(
     async (track: TrackSummary, timeline: AudioTimeline) => {
-      const audio = ensureAudio();
       const source = toAssetUrl(track.audioPath);
       if (!source) {
-        throw new Error("当前谱面没有可播放的音乐文件");
+        throw new Error("当前曲目没有可播放的音乐文件");
       }
+
       stopScheduler();
-      pauseAudio(audio);
+      stopSource();
+      playingRef.current = false;
       setIsPlaying(false);
+      sessionRef.current += 1;
       scheduledRef.current.clear();
+
+      const buffer = await decodeUrl(source, mainBuffersRef.current, track.audioPath ?? source);
+      mainBufferRef.current = buffer;
       timelineRef.current = timeline;
-      audio.src = source;
-      audio.volume = 1;
-      audio.playbackRate = Math.max(0.05, timeline.pitch);
-      audio.currentTime = 0;
+      positionRef.current = 0;
+      startedAtRef.current = 0;
+      durationRef.current = Math.max(timeline.duration, buffer.duration / Math.max(0.05, timeline.pitch));
       setCurrentTime(0);
-      setDuration(timeline.duration);
-      await loadMedia(audio);
+      setDuration(durationRef.current);
+      await preloadTimelineSounds(timeline);
     },
-    [ensureAudio, stopScheduler],
+    [decodeUrl, preloadTimelineSounds, stopScheduler, stopSource],
   );
 
   const play = useCallback(async () => {
-    const audio = ensureAudio();
     const context = ensureContext();
     await context.resume();
-    await audio.play();
-    setIsPlaying(true);
-    startScheduler();
-  }, [ensureAudio, ensureContext, startScheduler]);
+    if (playingRef.current) {
+      return;
+    }
+    startSource(positionRef.current);
+  }, [ensureContext, startSource]);
 
   const pause = useCallback(() => {
-    const audio = ensureAudio();
-    pauseAudio(audio);
+    if (!playingRef.current) {
+      return;
+    }
+    positionRef.current = transportTime();
+    playingRef.current = false;
     setIsPlaying(false);
     stopScheduler();
-  }, [ensureAudio, stopScheduler]);
+    stopSource();
+  }, [stopScheduler, stopSource, transportTime]);
 
-  const seek = useCallback((time: number) => {
-    const audio = ensureAudio();
-    audio.currentTime = Math.max(0, time);
-    scheduledRef.current.clear();
-    setCurrentTime(audio.currentTime);
-  }, [ensureAudio]);
+  const seek = useCallback(
+    (time: number) => {
+      const wasPlaying = playingRef.current;
+      const nextTime = Math.min(durationRef.current, Math.max(0, time));
+      positionRef.current = nextTime;
+      scheduledRef.current.clear();
+      setCurrentTime(nextTime);
+      if (wasPlaying) {
+        startSource(nextTime);
+      }
+    },
+    [startSource],
+  );
+
+  const syncClock = useCallback(() => {
+    const nextTime = transportTime();
+    setCurrentTime(nextTime);
+    setDuration(durationRef.current);
+    frameRef.current = window.requestAnimationFrame(syncClock);
+  }, [transportTime]);
 
   useEffect(() => {
-    const audio = ensureAudio();
-    const ended = () => {
-      setIsPlaying(false);
-      stopScheduler();
-    };
-    audio.addEventListener("ended", ended);
     frameRef.current = window.requestAnimationFrame(syncClock);
     return () => {
-      audio.removeEventListener("ended", ended);
       stopScheduler();
+      stopSource();
       if (frameRef.current !== null) {
         window.cancelAnimationFrame(frameRef.current);
       }
-      pauseAudio(audio);
     };
-  }, [ensureAudio, stopScheduler, syncClock]);
+  }, [stopScheduler, stopSource, syncClock]);
 
   return {
     currentTime,
@@ -238,32 +391,4 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     hitSoundsEnabled,
     playSoundsEnabled,
   };
-}
-
-function pauseAudio(audio: HTMLAudioElement) {
-  if (!audio.paused) {
-    audio.pause();
-  }
-}
-
-function loadMedia(audio: HTMLAudioElement) {
-  return new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      audio.removeEventListener("loadedmetadata", onReady);
-      audio.removeEventListener("canplay", onReady);
-      audio.removeEventListener("error", onError);
-    };
-    const onReady = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("音乐文件无法播放"));
-    };
-    audio.addEventListener("loadedmetadata", onReady, { once: true });
-    audio.addEventListener("canplay", onReady, { once: true });
-    audio.addEventListener("error", onError, { once: true });
-    audio.load();
-  });
 }

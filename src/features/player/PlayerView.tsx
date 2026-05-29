@@ -155,7 +155,7 @@ export function PlayerView({
             <strong>节拍轨道</strong>
           </div>
           <ResourceNumber label="长按音" value={timeline?.holdSoundEvents.length ?? 0} />
-          <ResourceNumber label="倒计时" value={timeline?.countdownEvents.length ?? 0} />
+          <ResourceNumber label="打拍点" value={timeline?.hitEvents.length ?? 0} />
         </div>
       </div>
     </section>

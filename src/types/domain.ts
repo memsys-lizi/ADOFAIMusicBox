@@ -50,6 +50,7 @@ export interface TrackDetail {
 
 export interface HitEvent {
   timeSec: number;
+  endTimeSec?: number | null;
   soundName: string;
   volume: number;
   pitch: number;
@@ -64,7 +65,6 @@ export interface AudioTimeline {
   hitEvents: HitEvent[];
   playSoundEvents: HitEvent[];
   holdSoundEvents: HitEvent[];
-  countdownEvents: HitEvent[];
   warnings: string[];
 }
 
