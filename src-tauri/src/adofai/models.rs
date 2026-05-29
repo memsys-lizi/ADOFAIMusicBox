@@ -6,8 +6,12 @@ use std::collections::BTreeMap;
 pub struct LibrarySettings {
     pub folders: Vec<String>,
     pub theme: ThemeMode,
+    #[serde(default = "default_music_volume")]
+    pub music_volume: f32,
     pub hit_sound_volume: f32,
     pub play_sound_volume: f32,
+    #[serde(default)]
+    pub playback_mode: PlaybackMode,
     pub default_cover_mode: DefaultCoverMode,
     pub audio_asset_root: Option<String>,
     pub lenient_parsing: bool,
@@ -18,13 +22,19 @@ impl Default for LibrarySettings {
         Self {
             folders: Vec::new(),
             theme: ThemeMode::Dark,
+            music_volume: default_music_volume(),
             hit_sound_volume: 0.82,
             play_sound_volume: 0.78,
+            playback_mode: PlaybackMode::Sequence,
             default_cover_mode: DefaultCoverMode::Generated,
             audio_asset_root: None,
             lenient_parsing: true,
         }
     }
+}
+
+fn default_music_volume() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +50,16 @@ pub enum ThemeMode {
 pub enum DefaultCoverMode {
     Generated,
     Minimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackMode {
+    #[default]
+    Sequence,
+    RepeatAll,
+    RepeatOne,
+    Shuffle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

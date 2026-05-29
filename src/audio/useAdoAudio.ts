@@ -3,8 +3,10 @@ import { toAssetUrl } from "../lib/assets";
 import type { AudioTimeline, HitEvent, TrackSummary } from "../types/domain";
 
 interface UseAdoAudioOptions {
+  musicVolume: number;
   hitSoundVolume: number;
   playSoundVolume: number;
+  onEnded?: () => void;
 }
 
 interface AdoAudioApi {
@@ -42,6 +44,7 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
   const durationRef = useRef(0);
   const playingRef = useRef(false);
   const sessionRef = useRef(0);
+  const onEndedRef = useRef<(() => void) | undefined>(options.onEnded);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -60,11 +63,11 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     const context = ensureContext();
     if (!mainGainRef.current) {
       mainGainRef.current = context.createGain();
-      mainGainRef.current.gain.value = 1;
+      mainGainRef.current.gain.value = clampVolume(options.musicVolume);
       mainGainRef.current.connect(context.destination);
     }
     return mainGainRef.current;
-  }, [ensureContext]);
+  }, [ensureContext, options.musicVolume]);
 
   const transportTime = useCallback(() => {
     const context = contextRef.current;
@@ -249,13 +252,16 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     intervalRef.current = window.setInterval(runScheduler, SCHEDULER_INTERVAL_MS);
   }, [runScheduler, stopScheduler]);
 
-  const finishPlayback = useCallback(() => {
+  const finishPlayback = useCallback((notify = true) => {
     stopScheduler();
     sourceRef.current = null;
     positionRef.current = durationRef.current;
     playingRef.current = false;
     setCurrentTime(durationRef.current);
     setIsPlaying(false);
+    if (notify) {
+      onEndedRef.current?.();
+    }
   }, [stopScheduler]);
 
   const startSource = useCallback(
@@ -368,6 +374,18 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
   }, [transportTime]);
 
   useEffect(() => {
+    onEndedRef.current = options.onEnded;
+  }, [options.onEnded]);
+
+  useEffect(() => {
+    const context = contextRef.current;
+    const gain = mainGainRef.current;
+    if (context && gain) {
+      gain.gain.setTargetAtTime(clampVolume(options.musicVolume), context.currentTime, 0.01);
+    }
+  }, [options.musicVolume]);
+
+  useEffect(() => {
     frameRef.current = window.requestAnimationFrame(syncClock);
     return () => {
       stopScheduler();
@@ -391,4 +409,8 @@ export function useAdoAudio(options: UseAdoAudioOptions): AdoAudioApi {
     hitSoundsEnabled,
     playSoundsEnabled,
   };
+}
+
+function clampVolume(value: number) {
+  return Math.min(1, Math.max(0, value));
 }

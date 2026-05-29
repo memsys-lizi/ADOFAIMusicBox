@@ -4,7 +4,7 @@ use super::parser::{
     value_as_f64, value_as_string,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::f64::consts::PI;
 use std::path::Path;
 
@@ -161,10 +161,7 @@ fn read_angles(root: &Value, warnings: &mut Vec<String>) -> Result<Vec<f64>, Str
 
     if let Some(path_data) = root.get("pathData").and_then(Value::as_str) {
         warnings.push("谱面使用旧版 pathData，已转换为角度数据".to_string());
-        return Ok(path_data
-            .chars()
-            .filter_map(char_to_angle)
-            .collect::<Vec<f64>>());
+        return Ok(path_data_to_angles(path_data, warnings));
     }
 
     Err("谱面缺少 angleData/pathData".to_string())
@@ -231,9 +228,12 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
     let mut planets = 2;
     let mut radius_carry_extra = 0.0;
 
-    for floor in floors.iter_mut() {
-        floor.extra_beats = 0.0;
-        let events = by_floor.get(&floor.seq_id).cloned().unwrap_or_default();
+    for index in 0..floors.len() {
+        floors[index].extra_beats = 0.0;
+        let events = by_floor
+            .get(&floors[index].seq_id)
+            .cloned()
+            .unwrap_or_default();
         let set_speed_events: Vec<&Value> = events
             .iter()
             .copied()
@@ -246,45 +246,65 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
                     is_ccw = !is_ccw;
                 }
                 Some("Pause") => {
-                    floor.extra_beats += value_as_f64(event.get("duration"), 0.0);
-                    floor.countdown_ticks = value_as_f64(event.get("countdownTicks"), 0.0) as i32;
+                    if index + 1 < floors.len() && !floors[index].mid_spin {
+                        floors[index].extra_beats += value_as_f64(event.get("duration"), 0.0);
+                        floors[index].countdown_ticks =
+                            value_as_f64(event.get("countdownTicks"), 0.0) as i32;
+                    }
                 }
                 Some("FreeRoam") => {
                     let duration = value_as_f64(event.get("duration"), 0.0);
-                    if duration >= 2.0 {
-                        floor.extra_beats += duration;
-                        floor.countdown_ticks =
+                    if index + 1 < floors.len() && duration >= 2.0 {
+                        let angle_beats = single_floor_angle_beats(
+                            &floors[index],
+                            is_ccw,
+                            planets,
+                            floors
+                                .get(index.wrapping_sub(1))
+                                .map(|floor| floor.mid_spin)
+                                .unwrap_or(false),
+                        );
+                        floors[index].extra_beats += angle_beats.max(duration - angle_beats);
+                        floors[index].countdown_ticks =
                             value_as_f64(event.get("countdownTicks"), 0.0) as i32;
-                        floor.freeroam_sound_on = event
+                        floors[index].freeroam_sound_on = event
                             .get("hitsoundOnBeats")
                             .and_then(Value::as_str)
                             .map(str::to_string);
-                        floor.freeroam_sound_off = event
+                        floors[index].freeroam_sound_off = event
                             .get("hitsoundOffBeats")
                             .and_then(Value::as_str)
                             .map(str::to_string);
                     }
                 }
                 Some("Hold") => {
-                    floor.hold_length = value_as_f64(event.get("duration"), -1.0) as i32;
+                    let duration = value_as_f64(event.get("duration"), -1.0) as i32;
+                    floors[index].hold_length = if index + 1 < floors.len() && duration >= 0 {
+                        duration
+                    } else {
+                        -1
+                    };
                 }
                 Some("MultiPlanet") => {
                     planets = value_as_f64(event.get("planets"), planets as f64)
                         .round()
                         .clamp(2.0, 3.0) as i32;
+                    if index > 0 && floors[index - 1].mid_spin {
+                        floors[index - 1].num_planets = planets;
+                    }
                 }
                 Some("Multitap") => {
-                    floor.taps_needed = value_as_f64(event.get("taps"), 1.0).round() as i32;
+                    floors[index].taps_needed = value_as_f64(event.get("taps"), 1.0).round() as i32;
                 }
                 Some("SetHitsound") => {
-                    floor.set_hitsound = Some(SoundChange {
+                    floors[index].set_hitsound = Some(SoundChange {
                         game_sound: value_as_string(event.get("gameSound"), "Hitsound"),
                         hitsound: value_as_string(event.get("hitsound"), "Kick"),
                         volume: (value_as_f64(event.get("hitsoundVolume"), 100.0) / 100.0) as f32,
                     });
                 }
                 Some("SetHoldSound") => {
-                    floor.set_hold_sound = Some(HoldSoundChange {
+                    floors[index].set_hold_sound = Some(HoldSoundChange {
                         start: value_as_string(event.get("holdStartSound"), "None"),
                         loop_sound: value_as_string(event.get("holdLoopSound"), "None"),
                         end: value_as_string(event.get("holdEndSound"), "None"),
@@ -305,14 +325,15 @@ fn apply_floor_events(root: &Value, floors: &mut [Floor], base_bpm: f64) {
             }
         }
 
-        let angle_deg = angle_moved(floor.entry_angle, floor.exit_angle, !is_ccw).to_degrees();
+        let angle_deg =
+            angle_moved(floors[index].entry_angle, floors[index].exit_angle, !is_ccw).to_degrees();
         let (floor_speed, next_speed) =
             speed_from_events(&set_speed_events, base_bpm, speed, angle_deg);
-        floor.speed = floor_speed;
+        floors[index].speed = floor_speed;
         speed = next_speed;
-        floor.is_ccw = is_ccw;
-        floor.num_planets = planets;
-        floor.extra_beats += radius_carry_extra;
+        floors[index].is_ccw = is_ccw;
+        floors[index].num_planets = planets;
+        floors[index].extra_beats += radius_carry_extra;
     }
 }
 
@@ -392,7 +413,7 @@ fn calculate_entry_times(
         return;
     }
     let crotchet = 60.0 / bpm;
-    let mut time = crotchet * (adjusted_countdown_ticks - 1.0).max(0.0)
+    let mut time = crotchet * (adjusted_countdown_ticks - 1.0)
         + time_between_angles(
             floors[0].entry_angle,
             floors[0].exit_angle,
@@ -856,6 +877,36 @@ fn inverse_angle_per_beat(planets: f64) -> f64 {
     PI * (planets - 2.0) / planets
 }
 
+fn single_floor_angle_beats(
+    floor: &Floor,
+    is_ccw: bool,
+    num_planets: i32,
+    previous_mid_spin: bool,
+) -> f64 {
+    let direction = if !is_ccw { 1.0 } else { -1.0 };
+    let mut inverse = inverse_angle_per_beat(num_planets as f64) * direction;
+    if floor.mid_spin {
+        inverse = 0.0;
+    }
+    if previous_mid_spin && num_planets > 2 {
+        inverse -= (TAU + inverse_angle_per_beat(num_planets as f64)) * direction;
+    }
+    let angle = angle_moved(
+        floor.entry_angle + inverse,
+        floor.exit_angle + if floor.mid_spin { inverse } else { 0.0 },
+        !is_ccw,
+    );
+    if angle <= 0.000001 || angle >= TAU - 0.000001 {
+        if floor.mid_spin {
+            0.0
+        } else {
+            2.0
+        }
+    } else {
+        angle / PI
+    }
+}
+
 fn modulo(value: f64, modulus: f64) -> f64 {
     ((value % modulus) + modulus) % modulus
 }
@@ -864,16 +915,71 @@ fn approx(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.0001
 }
 
+fn path_data_to_angles(path_data: &str, warnings: &mut Vec<String>) -> Vec<f64> {
+    let mut previous = 0.0;
+    let mut unknown = BTreeSet::new();
+    let mut angles = Vec::with_capacity(path_data.chars().count());
+
+    for ch in path_data.chars() {
+        let angle = char_to_angle(ch).unwrap_or_else(|| match ch {
+            '5' => previous + 72.0,
+            '6' => previous - 72.0,
+            '7' => previous + 52.0,
+            '8' => previous - 52.0,
+            '9' => previous - 30.0,
+            'h' => previous + 120.0,
+            'j' => previous - 120.0,
+            't' => previous + 60.0,
+            'y' => previous + 300.0,
+            _ => {
+                unknown.insert(ch);
+                previous
+            }
+        });
+        angles.push(angle);
+        previous = angle;
+    }
+
+    if !unknown.is_empty() {
+        let chars = unknown
+            .into_iter()
+            .map(|ch| ch.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        warnings.push(format!(
+            "pathData 包含未识别路径字符：{chars}，已按官方兼容逻辑沿用上一角度"
+        ));
+    }
+
+    angles
+}
+
 fn char_to_angle(ch: char) -> Option<f64> {
     match ch {
         'R' => Some(0.0),
-        'U' => Some(90.0),
-        'L' => Some(180.0),
-        'D' => Some(270.0),
-        'Q' => Some(135.0),
         'E' => Some(45.0),
+        'U' => Some(90.0),
+        'Q' => Some(135.0),
+        'L' => Some(180.0),
         'Z' => Some(225.0),
+        'D' => Some(270.0),
         'C' => Some(315.0),
+        'B' => Some(300.0),
+        'T' => Some(60.0),
+        'G' => Some(120.0),
+        'F' => Some(240.0),
+        'J' => Some(30.0),
+        'H' => Some(150.0),
+        'N' => Some(210.0),
+        'M' => Some(330.0),
+        'p' => Some(15.0),
+        'o' => Some(75.0),
+        'q' => Some(105.0),
+        'W' => Some(165.0),
+        'x' => Some(195.0),
+        'V' => Some(255.0),
+        'Y' => Some(285.0),
+        'A' => Some(345.0),
         '!' => Some(999.0),
         _ => None,
     }

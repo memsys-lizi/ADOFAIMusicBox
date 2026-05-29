@@ -1,4 +1,14 @@
-import { AlertCircle, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import {
+  AlertCircle,
+  ListOrdered,
+  Pause,
+  Play,
+  Repeat,
+  Repeat1,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { useAdoAudio } from "./audio/useAdoAudio";
@@ -22,6 +32,7 @@ import type {
   AppView,
   AudioTimeline,
   LibrarySettings,
+  PlaybackMode,
   TrackSummary,
 } from "./types/domain";
 
@@ -37,8 +48,10 @@ function App() {
   const [videoEnabled, setVideoEnabled] = useState(false);
 
   const audio = useAdoAudio({
+    musicVolume: settings?.musicVolume ?? 1,
     hitSoundVolume: settings?.hitSoundVolume ?? 0.82,
     playSoundVolume: settings?.playSoundVolume ?? 0.78,
+    onEnded: handlePlaybackEnded,
   });
 
   const theme = settings?.theme ?? "dark";
@@ -118,6 +131,15 @@ function App() {
     }
   }
 
+  function patchSettings(patch: Partial<LibrarySettings>) {
+    if (!settings) {
+      return;
+    }
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    void saveSettings(next).catch((err: unknown) => setError(errorMessage(err)));
+  }
+
   async function handlePlayTrack(track: TrackSummary) {
     setError(null);
     setSelectedTrack(track);
@@ -155,8 +177,45 @@ function App() {
     const index = selectedTrack
       ? tracks.findIndex((track) => track.id === selectedTrack.id)
       : -1;
-    const nextIndex = index >= tracks.length - 1 ? 0 : index + 1;
+    const nextIndex = settings?.playbackMode === "shuffle"
+      ? randomTrackIndex(index, tracks.length)
+      : index >= tracks.length - 1 ? 0 : index + 1;
     void handlePlayTrack(tracks[nextIndex]);
+  }
+
+  function handlePlaybackEnded() {
+    if (tracks.length === 0) {
+      return;
+    }
+    const mode = settings?.playbackMode ?? "sequence";
+    const current = selectedTrack ?? tracks[0];
+    const index = Math.max(0, tracks.findIndex((track) => track.id === current.id));
+
+    if (mode === "repeatOne") {
+      void handlePlayTrack(current);
+      return;
+    }
+
+    if (mode === "shuffle") {
+      void handlePlayTrack(tracks[randomTrackIndex(index, tracks.length)]);
+      return;
+    }
+
+    if (index < tracks.length - 1) {
+      void handlePlayTrack(tracks[index + 1]);
+      return;
+    }
+
+    if (mode === "repeatAll") {
+      void handlePlayTrack(tracks[0]);
+    }
+  }
+
+  function cyclePlaybackMode() {
+    const modes: PlaybackMode[] = ["sequence", "repeatAll", "repeatOne", "shuffle"];
+    const current = settings?.playbackMode ?? "sequence";
+    const index = modes.indexOf(current);
+    patchSettings({ playbackMode: modes[(index + 1) % modes.length] });
   }
 
   function handlePlayPause() {
@@ -236,9 +295,18 @@ function App() {
         isPlaying={audio.isPlaying}
         currentTime={audio.currentTime}
         duration={audio.duration || timeline?.duration || selectedTrack?.duration || 0}
+        musicVolume={settings?.musicVolume ?? 1}
+        hitSoundVolume={settings?.hitSoundVolume ?? 0.82}
+        playSoundVolume={settings?.playSoundVolume ?? 0.78}
+        playbackMode={settings?.playbackMode ?? "sequence"}
         onPlayPause={handlePlayPause}
         onPrevious={handlePreviousTrack}
         onNext={handleNextTrack}
+        onSeek={audio.seek}
+        onMusicVolumeChange={(musicVolume) => patchSettings({ musicVolume })}
+        onHitSoundVolumeChange={(hitSoundVolume) => patchSettings({ hitSoundVolume })}
+        onPlaySoundVolumeChange={(playSoundVolume) => patchSettings({ playSoundVolume })}
+        onCyclePlaybackMode={cyclePlaybackMode}
         onOpenPlayer={() => setActiveView("nowPlaying")}
       />
     </>
@@ -250,9 +318,18 @@ interface MiniPlayerProps {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  musicVolume: number;
+  hitSoundVolume: number;
+  playSoundVolume: number;
+  playbackMode: PlaybackMode;
   onPlayPause: () => void;
   onPrevious: () => void;
   onNext: () => void;
+  onSeek: (time: number) => void;
+  onMusicVolumeChange: (volume: number) => void;
+  onHitSoundVolumeChange: (volume: number) => void;
+  onPlaySoundVolumeChange: (volume: number) => void;
+  onCyclePlaybackMode: () => void;
   onOpenPlayer: () => void;
 }
 
@@ -261,11 +338,23 @@ function MiniPlayer({
   isPlaying,
   currentTime,
   duration,
+  musicVolume,
+  hitSoundVolume,
+  playSoundVolume,
+  playbackMode,
   onPlayPause,
   onPrevious,
   onNext,
+  onSeek,
+  onMusicVolumeChange,
+  onHitSoundVolumeChange,
+  onPlaySoundVolumeChange,
+  onCyclePlaybackMode,
   onOpenPlayer,
 }: MiniPlayerProps) {
+  const safeDuration = Math.max(0, duration);
+  const seekMax = Math.max(1, safeDuration);
+
   return (
     <footer className="mini-player">
       <button className="mini-track" type="button" onClick={onOpenPlayer}>
@@ -287,16 +376,57 @@ function MiniPlayer({
         </button>
         <div className="mini-progress">
           <span>{formatDuration(currentTime)}</span>
-          <div>
-            <i style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} />
-          </div>
+          <input
+            className="mini-seek"
+            type="range"
+            min="0"
+            max={seekMax}
+            step="0.01"
+            value={Math.min(currentTime, seekMax)}
+            onChange={(event) => onSeek(Number(event.currentTarget.value))}
+            aria-label="播放进度"
+          />
           <span>{formatDuration(duration)}</span>
         </div>
       </div>
-      <div className="mini-meta">
-        <strong>{track ? `${Math.round(track.bpm)} BPM` : "--"}</strong>
+      <div className="mini-tools">
+        <button
+          className="mode-button"
+          type="button"
+          onClick={onCyclePlaybackMode}
+          title={playbackModeLabel(playbackMode)}
+        >
+          {playbackModeIcon(playbackMode)}
+          <span>{playbackModeLabel(playbackMode)}</span>
+        </button>
+        <VolumeControl label="音乐" value={musicVolume} onChange={onMusicVolumeChange} />
+        <VolumeControl label="打拍" value={hitSoundVolume} onChange={onHitSoundVolumeChange} />
+        <VolumeControl label="音效" value={playSoundVolume} onChange={onPlaySoundVolumeChange} />
       </div>
     </footer>
+  );
+}
+
+interface VolumeControlProps {
+  label: string;
+  value: number;
+  onChange: (volume: number) => void;
+}
+
+function VolumeControl({ label, value, onChange }: VolumeControlProps) {
+  return (
+    <label className="volume-control">
+      <span>{label}</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={value}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+      <b>{Math.round(value * 100)}</b>
+    </label>
   );
 }
 
@@ -315,6 +445,43 @@ function normalizeTrack(track: TrackSummary): TrackSummary {
     artist: cleanDisplayText(track.artist),
     author: cleanDisplayText(track.author),
   };
+}
+
+function randomTrackIndex(currentIndex: number, length: number) {
+  if (length <= 1) {
+    return 0;
+  }
+  let next = Math.floor(Math.random() * length);
+  if (next === currentIndex) {
+    next = (next + 1) % length;
+  }
+  return next;
+}
+
+function playbackModeLabel(mode: PlaybackMode) {
+  switch (mode) {
+    case "sequence":
+      return "顺序";
+    case "repeatAll":
+      return "列表循环";
+    case "repeatOne":
+      return "单曲循环";
+    case "shuffle":
+      return "随机";
+  }
+}
+
+function playbackModeIcon(mode: PlaybackMode) {
+  switch (mode) {
+    case "sequence":
+      return <ListOrdered aria-hidden="true" />;
+    case "repeatAll":
+      return <Repeat aria-hidden="true" />;
+    case "repeatOne":
+      return <Repeat1 aria-hidden="true" />;
+    case "shuffle":
+      return <Shuffle aria-hidden="true" />;
+  }
 }
 
 export default App;

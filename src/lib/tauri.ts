@@ -9,8 +9,10 @@ import type {
 const browserPreviewSettings: LibrarySettings = {
   folders: [],
   theme: "dark",
+  musicVolume: 1,
   hitSoundVolume: 0.82,
   playSoundVolume: 0.78,
+  playbackMode: "sequence",
   defaultCoverMode: "generated",
   audioAssetRoot: null,
   lenientParsing: true,

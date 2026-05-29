@@ -2,12 +2,15 @@ export type ThemeMode = "dark" | "light" | "system";
 export type DefaultCoverMode = "generated" | "minimal";
 export type ParseStatus = "ok" | "lenient" | "warning" | "error";
 export type AppView = "library" | "nowPlaying" | "detail" | "settings";
+export type PlaybackMode = "sequence" | "repeatAll" | "repeatOne" | "shuffle";
 
 export interface LibrarySettings {
   folders: string[];
   theme: ThemeMode;
+  musicVolume: number;
   hitSoundVolume: number;
   playSoundVolume: number;
+  playbackMode: PlaybackMode;
   defaultCoverMode: DefaultCoverMode;
   audioAssetRoot?: string | null;
   lenientParsing: boolean;
