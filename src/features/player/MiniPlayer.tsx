@@ -13,7 +13,7 @@ import {
   Volume2,
   Waves,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration } from "../../lib/format";
 import type { PlaybackMode, TrackSummary } from "../../types/domain";
@@ -72,6 +72,9 @@ export function MiniPlayer({
   const [mixOpen, setMixOpen] = useState(false);
   const safeDuration = Math.max(0, duration);
   const seekMax = Math.max(1, safeDuration);
+  const progressStyle = {
+    "--progress": `${Math.min(100, Math.max(0, (currentTime / seekMax) * 100))}%`,
+  } as CSSProperties;
 
   return (
     <footer className="mini-player">
@@ -120,6 +123,7 @@ export function MiniPlayer({
             max={seekMax}
             step="0.01"
             value={Math.min(currentTime, seekMax)}
+            style={progressStyle}
             onChange={(event) => onSeek(Number(event.currentTarget.value))}
             aria-label="播放进度"
           />
