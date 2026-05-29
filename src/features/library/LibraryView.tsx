@@ -1,111 +1,167 @@
-import { open } from "@tauri-apps/plugin-dialog";
 import {
+  CheckCircle2,
+  CircleAlert,
   Grid2X2,
+  Heart,
   List,
+  MoreHorizontal,
+  Play,
   Plus,
   Search,
-  SlidersHorizontal,
-  Sparkles,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
-import { StatPill } from "../../components/StatPill";
-import { formatCount, formatDuration } from "../../lib/format";
-import type { LibrarySettings, TrackSummary } from "../../types/domain";
+import { formatDuration, formatFileSize } from "../../lib/format";
+import type { AppView, TrackSummary } from "../../types/domain";
 
 interface LibraryViewProps {
+  activeView: AppView;
   tracks: TrackSummary[];
-  settings: LibrarySettings | null;
+  allTrackCount: number;
+  favoriteCount: number;
+  recentCount: number;
   selectedTrack: TrackSummary | null;
-  onAddFolder: (folder: string) => Promise<void>;
-  onSelectTrack: (track: TrackSummary) => void;
+  favoriteIds: Set<string>;
+  query: string;
+  isScanning: boolean;
+  onViewChange: (view: AppView) => void;
   onPlayTrack: (track: TrackSummary) => void;
+  onPlayAll: () => void;
+  onToggleFavorite: (track: TrackSummary) => void;
+  onAddFolder: () => void;
+  onOpenFolderManager: () => void;
+  onScan: () => void;
 }
 
 type LayoutMode = "list" | "grid";
+type SortMode = "title" | "artist" | "duration" | "bpm";
 
 export function LibraryView({
+  activeView,
   tracks,
-  settings,
+  allTrackCount,
+  favoriteCount,
+  recentCount,
   selectedTrack,
-  onAddFolder,
-  onSelectTrack,
+  favoriteIds,
+  query,
+  isScanning,
+  onViewChange,
   onPlayTrack,
+  onPlayAll,
+  onToggleFavorite,
+  onAddFolder,
+  onOpenFolderManager,
+  onScan,
 }: LibraryViewProps) {
-  const [query, setQuery] = useState("");
   const [layout, setLayout] = useState<LayoutMode>("list");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortMode, setSortMode] = useState<SortMode>("title");
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const filteredTracks = useMemo(() => {
+  const shownTracks = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return tracks.filter((track) => {
-      const matchQuery =
-        !normalized ||
-        [track.title, track.artist, track.author, track.folderPath]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalized);
-      const matchStatus = statusFilter === "all" || track.parseStatus === statusFilter;
-      return matchQuery && matchStatus;
-    });
-  }, [query, statusFilter, tracks]);
+    const filtered = normalized
+      ? tracks.filter((track) =>
+          [track.title, track.artist, track.author, track.folderPath]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalized),
+        )
+      : tracks;
 
-  async function chooseFolder() {
-    const result = await open({ directory: true, multiple: false });
-    if (typeof result === "string") {
-      await onAddFolder(result);
-    }
-  }
+    return [...filtered].sort((a, b) => compareTracks(a, b, sortMode));
+  }, [query, sortMode, tracks]);
 
   return (
-    <section className="page library-page">
-      <header className="page-header">
+    <section className="library-page">
+      <header className="library-header">
         <div>
-          <p className="eyebrow">Library</p>
-          <h2>谱面曲库</h2>
-          <p className="page-description">收藏、搜索和播放带节拍音的 ADOFAI 音乐。</p>
+          <h1>{viewTitle(activeView)}</h1>
+          <div className="library-tabs">
+            <button
+              className={activeView === "local" ? "active" : ""}
+              type="button"
+              onClick={() => onViewChange("local")}
+            >
+              本地曲目{allTrackCount}
+            </button>
+            <button
+              className={activeView === "favorites" ? "active" : ""}
+              type="button"
+              onClick={() => onViewChange("favorites")}
+            >
+              喜欢{favoriteCount}
+            </button>
+            <button
+              className={activeView === "recent" ? "active" : ""}
+              type="button"
+              onClick={() => onViewChange("recent")}
+            >
+              最近播放{recentCount}
+            </button>
+          </div>
         </div>
-        <button className="primary-button" type="button" onClick={chooseFolder}>
-          <Plus aria-hidden="true" />
-          <span>添加文件夹</span>
-        </button>
+        <div className="library-summary">
+          <span>{shownTracks.length} 首</span>
+          <span>{isScanning ? "正在整理" : "已就绪"}</span>
+        </div>
       </header>
 
-      <div className="library-stats">
-        <StatPill label="谱面" value={formatCount(tracks.length)} />
-        <StatPill label="来源" value={formatCount(settings?.folders.length ?? 0)} />
-        <StatPill
-          label="可播放"
-          value={formatCount(tracks.filter((track) => Boolean(track.audioPath)).length)}
-        />
-        <StatPill
-          label="需留意"
-          value={formatCount(tracks.filter((track) => track.parseStatus !== "ok").length)}
-        />
-      </div>
-
-      <div className="toolbar">
-        <label className="search-box">
-          <Search aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder="搜索曲名、艺术家或谱师"
-          />
-        </label>
-        <label className="select-box">
-          <SlidersHorizontal aria-hidden="true" />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">全部曲目</option>
-            <option value="ok">正常</option>
-            <option value="lenient">兼容读取</option>
-            <option value="warning">需留意</option>
-            <option value="error">不可播放</option>
-          </select>
-        </label>
-        <div className="segmented-control" aria-label="曲库布局">
+      <div className="library-actions">
+        <button className="pill-button main" type="button" onClick={onPlayAll} disabled={shownTracks.length === 0}>
+          <Play aria-hidden="true" />
+          <span>播放</span>
+        </button>
+        <button className="pill-button" type="button" onClick={onAddFolder}>
+          <Plus aria-hidden="true" />
+          <span>添加</span>
+        </button>
+        <div className="more-wrap">
           <button
-            className={layout === "list" ? "active" : ""}
+            className="round-button"
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            title="更多"
+          >
+            <MoreHorizontal aria-hidden="true" />
+          </button>
+          {menuOpen && (
+            <div className="more-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenFolderManager();
+                }}
+              >
+                管理文件夹
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onScan();
+                }}
+              >
+                重新整理
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="library-tools">
+          <span className="inline-search">
+            <Search aria-hidden="true" />
+            搜索
+          </span>
+          <select value={sortMode} onChange={(event) => setSortMode(event.currentTarget.value as SortMode)}>
+            <option value="title">按歌名</option>
+            <option value="artist">按作曲</option>
+            <option value="duration">按时长</option>
+            <option value="bpm">按 BPM</option>
+          </select>
+          <button
+            className={layout === "list" ? "tool-button active" : "tool-button"}
             type="button"
             onClick={() => setLayout("list")}
             title="列表"
@@ -113,47 +169,61 @@ export function LibraryView({
             <List aria-hidden="true" />
           </button>
           <button
-            className={layout === "grid" ? "active" : ""}
+            className={layout === "grid" ? "tool-button active" : "tool-button"}
             type="button"
             onClick={() => setLayout("grid")}
-            title="网格"
+            title="封面"
           >
             <Grid2X2 aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      {tracks.length === 0 ? (
-        <div className="empty-state">
-          <Sparkles aria-hidden="true" />
-          <h3>曲库是空的</h3>
-          <p>添加你的 ADOFAI 音乐文件夹后，就可以在这里播放。</p>
-          <button className="primary-button" type="button" onClick={chooseFolder}>
-            <Plus aria-hidden="true" />
-            <span>添加文件夹</span>
-          </button>
+      {shownTracks.length === 0 ? (
+        <div className="empty-library">
+          <div className="empty-icon">
+            {activeView === "local" ? <Plus aria-hidden="true" /> : <Heart aria-hidden="true" />}
+          </div>
+          <h2>{emptyTitle(activeView, query)}</h2>
+          <p>{emptyDescription(activeView, query)}</p>
+          {activeView === "local" && (
+            <button className="pill-button main" type="button" onClick={onAddFolder}>
+              <Plus aria-hidden="true" />
+              <span>添加文件夹</span>
+            </button>
+          )}
+        </div>
+      ) : layout === "list" ? (
+        <div className="track-table">
+          <div className="track-head">
+            <span>歌名/作曲</span>
+            <span>谱面</span>
+            <span>时长</span>
+            <span>大小</span>
+          </div>
+          {shownTracks.map((track) => (
+            <TrackRow
+              key={track.id}
+              track={track}
+              selected={selectedTrack?.id === track.id}
+              favorite={favoriteIds.has(track.id)}
+              onPlayTrack={onPlayTrack}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
         </div>
       ) : (
-        <div className={layout === "grid" ? "track-grid" : "track-list"}>
-          {filteredTracks.map((track) =>
-            layout === "grid" ? (
-              <TrackCard
-                key={track.id}
-                track={track}
-                selected={selectedTrack?.id === track.id}
-                onSelectTrack={onSelectTrack}
-                onPlayTrack={onPlayTrack}
-              />
-            ) : (
-              <TrackRow
-                key={track.id}
-                track={track}
-                selected={selectedTrack?.id === track.id}
-                onSelectTrack={onSelectTrack}
-                onPlayTrack={onPlayTrack}
-              />
-            ),
-          )}
+        <div className="cover-grid">
+          {shownTracks.map((track) => (
+            <TrackCard
+              key={track.id}
+              track={track}
+              selected={selectedTrack?.id === track.id}
+              favorite={favoriteIds.has(track.id)}
+              onPlayTrack={onPlayTrack}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -163,66 +233,122 @@ export function LibraryView({
 interface TrackItemProps {
   track: TrackSummary;
   selected: boolean;
-  onSelectTrack: (track: TrackSummary) => void;
+  favorite: boolean;
   onPlayTrack: (track: TrackSummary) => void;
+  onToggleFavorite: (track: TrackSummary) => void;
 }
 
-function TrackRow({ track, selected, onSelectTrack, onPlayTrack }: TrackItemProps) {
-  const playTrack = () => {
-    onSelectTrack(track);
-    onPlayTrack(track);
-  };
-
+function TrackRow({ track, selected, favorite, onPlayTrack, onToggleFavorite }: TrackItemProps) {
   return (
-    <button
+    <div
       className={selected ? "track-row selected" : "track-row"}
-      type="button"
-      onClick={playTrack}
+      role="button"
+      tabIndex={0}
+      onClick={() => onPlayTrack(track)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          onPlayTrack(track);
+        }
+      }}
     >
-      <EmptyArtwork title={track.title} imagePath={track.coverPath} size="sm" />
-      <div className="track-main">
-        <strong>{track.title}</strong>
-        <span>{track.artist} · 谱师 {track.author}</span>
+      <div className="song-cell">
+        <EmptyArtwork title={track.title} imagePath={track.iconPath ?? track.coverPath} size="sm" />
+        <div>
+          <strong>{track.title}</strong>
+          <span>{track.artist}</span>
+        </div>
       </div>
-      <span className="track-chip">{Math.round(track.bpm)} BPM</span>
-      <span className="track-chip">{formatDuration(track.duration)}</span>
-      <span className={`status-dot status-${track.parseStatus}`}>{statusLabel(track.parseStatus)}</span>
-    </button>
+      <button
+        className={favorite ? "heart-button active" : "heart-button"}
+        type="button"
+        title={favorite ? "取消喜欢" : "喜欢"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleFavorite(track);
+        }}
+      >
+        <Heart aria-hidden="true" />
+      </button>
+      <span className={track.audioPath ? "playable-state ready" : "playable-state missing"}>
+        {track.audioPath ? <CheckCircle2 aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+      </span>
+      <span className="mapper-cell">{track.author}</span>
+      <span>{formatDuration(track.duration)}</span>
+      <span>{formatFileSize(track.audioFileSize)}</span>
+    </div>
   );
 }
 
-function TrackCard({ track, selected, onSelectTrack, onPlayTrack }: TrackItemProps) {
-  const playTrack = () => {
-    onSelectTrack(track);
-    onPlayTrack(track);
-  };
-
+function TrackCard({ track, selected, favorite, onPlayTrack, onToggleFavorite }: TrackItemProps) {
   return (
-    <button
-      className={selected ? "track-card selected" : "track-card"}
-      type="button"
-      onClick={playTrack}
-    >
-      <EmptyArtwork title={track.title} imagePath={track.coverPath} size="md" />
-      <strong>{track.title}</strong>
-      <span>{track.artist}</span>
-      <div>
-        <span className="track-chip">{Math.round(track.bpm)} BPM</span>
-        <span className={`status-dot status-${track.parseStatus}`}>{statusLabel(track.parseStatus)}</span>
+    <div className={selected ? "track-card selected" : "track-card"}>
+      <button className="cover-play" type="button" onClick={() => onPlayTrack(track)}>
+        <EmptyArtwork title={track.title} imagePath={track.coverPath} size="md" />
+        <span>
+          <Play aria-hidden="true" />
+        </span>
+      </button>
+      <div className="card-meta">
+        <strong>{track.title}</strong>
+        <span>{track.artist}</span>
       </div>
-    </button>
+      <button
+        className={favorite ? "heart-button active" : "heart-button"}
+        type="button"
+        onClick={() => onToggleFavorite(track)}
+        title={favorite ? "取消喜欢" : "喜欢"}
+      >
+        <Heart aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
-function statusLabel(status: TrackSummary["parseStatus"]) {
-  switch (status) {
-    case "ok":
-      return "标准";
-    case "lenient":
-      return "兼容";
-    case "warning":
-      return "留意";
-    case "error":
-      return "不可播放";
+function compareTracks(a: TrackSummary, b: TrackSummary, mode: SortMode) {
+  if (mode === "duration") {
+    return b.duration - a.duration;
   }
+  if (mode === "bpm") {
+    return b.bpm - a.bpm;
+  }
+  const left = mode === "artist" ? a.artist : a.title;
+  const right = mode === "artist" ? b.artist : b.title;
+  return left.localeCompare(right, "zh-CN");
+}
+
+function viewTitle(view: AppView) {
+  switch (view) {
+    case "favorites":
+      return "喜欢";
+    case "recent":
+      return "最近播放";
+    case "local":
+      return "本地";
+  }
+}
+
+function emptyTitle(view: AppView, query: string) {
+  if (query.trim()) {
+    return "没有找到匹配的音乐";
+  }
+  if (view === "favorites") {
+    return "还没有喜欢的音乐";
+  }
+  if (view === "recent") {
+    return "还没有最近播放";
+  }
+  return "添加文件夹开始播放";
+}
+
+function emptyDescription(view: AppView, query: string) {
+  if (query.trim()) {
+    return "换一个关键词试试。";
+  }
+  if (view === "favorites") {
+    return "点亮歌曲旁边的爱心后，会收在这里。";
+  }
+  if (view === "recent") {
+    return "播放过的音乐会自动出现在这里。";
+  }
+  return "选择包含 .adofai 谱面的文件夹，软件会自动整理音乐和封面。";
 }

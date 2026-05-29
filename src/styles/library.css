@@ -1,0 +1,312 @@
+.library-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 0 22px;
+}
+
+.library-header h1 {
+  margin: 0 0 22px;
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.library-tabs {
+  display: flex;
+  align-items: center;
+  gap: 42px;
+  min-height: 28px;
+}
+
+.library-tabs button {
+  position: relative;
+  padding: 0;
+  color: #202124;
+  background: transparent;
+}
+
+.library-tabs button.active {
+  color: var(--active-dark);
+}
+
+.library-tabs button.active::after {
+  position: absolute;
+  right: 0;
+  bottom: -9px;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--active);
+  content: "";
+}
+
+.library-summary {
+  display: flex;
+  gap: 18px;
+  padding-top: 56px;
+  color: #5f6368;
+  font-size: 14px;
+}
+
+.library-actions {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 46px;
+  margin-bottom: 14px;
+}
+
+.more-wrap {
+  position: relative;
+}
+
+.more-menu {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  z-index: 8;
+  display: grid;
+  min-width: 144px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.more-menu button {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: #222222;
+  text-align: left;
+  background: transparent;
+}
+
+.more-menu button:hover {
+  background: #f2f2f2;
+}
+
+.library-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inline-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #303235;
+  font-size: 13px;
+}
+
+.inline-search svg {
+  width: 15px;
+  height: 15px;
+}
+
+.track-table {
+  display: grid;
+  align-content: start;
+  min-height: 0;
+}
+
+.track-head {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 180px 72px 78px;
+  gap: 12px;
+  padding: 0 28px 8px 8px;
+  color: #686d72;
+  font-size: 12px;
+}
+
+.track-head span:first-child {
+  padding-left: 2px;
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 36px 36px 180px 72px 78px;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 7px 18px 7px 8px;
+  border-radius: 0;
+  color: #111111;
+  outline: 0;
+  transition: background 150ms ease;
+}
+
+.track-row:hover,
+.track-row.selected {
+  background: #f1f1f1;
+}
+
+.song-cell {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.song-cell div,
+.card-meta,
+.overlay-track div,
+.mini-title {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.song-cell strong,
+.song-cell span,
+.mapper-cell,
+.card-meta strong,
+.card-meta span,
+.mini-title strong,
+.mini-title small,
+.overlay-track strong,
+.overlay-track span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-cell strong,
+.card-meta strong {
+  font-size: 14px;
+}
+
+.song-cell span,
+.card-meta span,
+.mapper-cell {
+  color: #5f6368;
+  font-size: 13px;
+}
+
+.track-row > span {
+  color: #4b4f55;
+  font-size: 13px;
+}
+
+.playable-state {
+  display: grid;
+  place-items: center;
+}
+
+.playable-state svg {
+  width: 17px;
+  height: 17px;
+}
+
+.playable-state.ready svg {
+  color: var(--active-dark);
+}
+
+.playable-state.missing svg {
+  color: var(--warning);
+}
+
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 22px;
+  padding-top: 6px;
+}
+
+.track-card {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.track-card.selected .artwork {
+  box-shadow: 0 0 0 2px var(--active);
+}
+
+.cover-play {
+  position: relative;
+  display: block;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.cover-play span {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  color: #111111;
+  background: rgba(255, 255, 255, 0.88);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.cover-play:hover span {
+  opacity: 1;
+}
+
+.cover-play svg {
+  width: 17px;
+  height: 17px;
+}
+
+.track-card > .heart-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.empty-library {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 360px;
+  gap: 12px;
+  color: #111111;
+  text-align: center;
+}
+
+.empty-library h2,
+.empty-library p {
+  margin: 0;
+}
+
+.empty-library p {
+  max-width: 420px;
+  color: #70757a;
+}
+
+.empty-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  color: #5f6368;
+  background: #eeeeee;
+}
+
+.empty-icon svg {
+  width: 24px;
+  height: 24px;
+}

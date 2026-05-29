@@ -8,7 +8,7 @@ import type {
 
 const browserPreviewSettings: LibrarySettings = {
   folders: [],
-  theme: "dark",
+  theme: "light",
   musicVolume: 1,
   hitSoundVolume: 0.82,
   playSoundVolume: 0.78,
@@ -16,6 +16,8 @@ const browserPreviewSettings: LibrarySettings = {
   defaultCoverMode: "generated",
   audioAssetRoot: null,
   lenientParsing: true,
+  favoriteTrackIds: [],
+  recentTrackIds: [],
 };
 
 function hasTauriBridge() {

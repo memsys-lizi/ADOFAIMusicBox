@@ -1,0 +1,26 @@
+:root {
+  font-family:
+    "Microsoft YaHei UI", "Segoe UI", Inter, ui-sans-serif, system-ui,
+    sans-serif;
+  color: #111111;
+  background: #eeeeee;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --app-bg: #eeeeee;
+  --surface: #fbfbfb;
+  --surface-soft: #f4f4f4;
+  --surface-strong: #ffffff;
+  --sidebar: #eeeeee;
+  --text: #111111;
+  --muted: #6f7378;
+  --soft: #a5a8ac;
+  --line: #e5e5e5;
+  --line-strong: #d8d8d8;
+  --active: #00d86a;
+  --active-dark: #00bd5b;
+  --danger: #ff5e68;
+  --warning: #d6a91d;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.06);
+}

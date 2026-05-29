@@ -1,7 +1,7 @@
 export type ThemeMode = "dark" | "light" | "system";
 export type DefaultCoverMode = "generated" | "minimal";
 export type ParseStatus = "ok" | "lenient" | "warning" | "error";
-export type AppView = "library" | "nowPlaying" | "detail" | "settings";
+export type AppView = "local" | "favorites" | "recent";
 export type PlaybackMode = "sequence" | "repeatAll" | "repeatOne" | "shuffle";
 
 export interface LibrarySettings {
@@ -14,6 +14,8 @@ export interface LibrarySettings {
   defaultCoverMode: DefaultCoverMode;
   audioAssetRoot?: string | null;
   lenientParsing: boolean;
+  favoriteTrackIds: string[];
+  recentTrackIds: string[];
 }
 
 export interface TrackSummary {
@@ -28,6 +30,7 @@ export interface TrackSummary {
   coverPath?: string | null;
   iconPath?: string | null;
   audioPath?: string | null;
+  audioFileSize?: number | null;
   videoPath?: string | null;
   hasVideo: boolean;
   parseStatus: ParseStatus;

@@ -88,6 +88,7 @@ fn summary_from_path(path: &Path, lenient: bool) -> TrackSummary {
                 cover_path: None,
                 icon_path: None,
                 audio_path: None,
+                audio_file_size: None,
                 video_path: None,
                 has_video: false,
                 parse_status: {
@@ -109,6 +110,10 @@ fn summary_from_parsed(
     let song_filename = string_setting(&settings, "songFilename");
     let audio_path = resolve_sibling(path, song_filename.as_deref())
         .or_else(|| find_first_with_extensions(path.parent(), AUDIO_EXTENSIONS));
+    let audio_file_size = audio_path
+        .as_ref()
+        .and_then(|path| path.metadata().ok())
+        .map(|metadata| metadata.len());
     let cover_path = resolve_sibling(path, string_setting(&settings, "previewImage").as_deref())
         .filter(|path| path.exists())
         .or_else(|| find_first_named_image(path.parent(), &["cover", "preview", "jacket"]));
@@ -155,6 +160,7 @@ fn summary_from_parsed(
         cover_path: path_string(cover_path),
         icon_path: path_string(icon_path),
         audio_path: path_string(audio_path),
+        audio_file_size,
         video_path: path_string(video_path.clone()),
         has_video: video_path.is_some(),
         parse_status: if !warnings.is_empty() {

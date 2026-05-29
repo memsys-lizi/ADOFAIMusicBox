@@ -1,61 +1,113 @@
 import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FolderPlus,
+  Heart,
+  Home,
   Library,
   ListMusic,
+  Maximize2,
+  Minimize,
   Music2,
-  PanelRight,
-  RefreshCw,
+  Search,
   Settings,
+  X,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { EmptyArtwork } from "./EmptyArtwork";
-import { StatPill } from "./StatPill";
-import { formatDuration } from "../lib/format";
+import type { MouseEvent, ReactNode } from "react";
+import { runWindowAction, startWindowDrag } from "../lib/window";
 import type { AppView, LibrarySettings, TrackSummary } from "../types/domain";
 
 interface AppShellProps {
   activeView: AppView;
   settings: LibrarySettings | null;
   tracks: TrackSummary[];
-  selectedTrack: TrackSummary | null;
+  favoriteCount: number;
+  recentCount: number;
+  searchQuery: string;
   isScanning: boolean;
   children: ReactNode;
   onViewChange: (view: AppView) => void;
+  onSearchChange: (query: string) => void;
+  onAddFolder: () => void;
+  onOpenFolderManager: () => void;
   onScan: () => void;
 }
 
-const navItems: Array<{ id: AppView; label: string; icon: typeof Library }> = [
-  { id: "library", label: "曲库", icon: Library },
-  { id: "nowPlaying", label: "正在播放", icon: Music2 },
-  { id: "detail", label: "曲目详情", icon: PanelRight },
-  { id: "settings", label: "设置", icon: Settings },
+const navItems: Array<{ id: AppView; label: string; icon: typeof Library; count: "tracks" | "favorites" | "recent" }> = [
+  { id: "favorites", label: "喜欢", icon: Heart, count: "favorites" },
+  { id: "recent", label: "最近播放", icon: Music2, count: "recent" },
+  { id: "local", label: "本地", icon: Library, count: "tracks" },
 ];
 
 export function AppShell({
   activeView,
   settings,
   tracks,
-  selectedTrack,
+  favoriteCount,
+  recentCount,
+  searchQuery,
   isScanning,
   children,
   onViewChange,
+  onSearchChange,
+  onAddFolder,
+  onOpenFolderManager,
   onScan,
 }: AppShellProps) {
+  function handleTitlebarMouseDown(event: MouseEvent<HTMLElement>) {
+    if (event.button !== 0 || shouldSkipWindowDrag(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    startWindowDrag();
+  }
+
+  function handleTitlebarDoubleClick(event: MouseEvent<HTMLElement>) {
+    if (shouldSkipWindowDrag(event.target)) {
+      return;
+    }
+    void runWindowAction("maximize");
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-frame">
       <aside className="sidebar">
-        <div className="brand-block">
-          <div className="brand-mark" aria-hidden="true">
+        <button className="brand-card" type="button" onClick={() => onViewChange("local")}>
+          <span className="brand-mark" aria-hidden="true">
             <ListMusic />
-          </div>
-          <div>
-            <p className="eyebrow">ADOFAI</p>
-            <h1>Music Box</h1>
-          </div>
+          </span>
+          <span>
+            <strong>ADOFAI</strong>
+            <small>Music Box</small>
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+
+        <div className="quick-grid" aria-label="快捷入口">
+          <button type="button" className="quick-tile active" onClick={() => onViewChange("local")}>
+            <Home aria-hidden="true" />
+          </button>
+          <button type="button" className="quick-tile" onClick={onOpenFolderManager}>
+            <Settings aria-hidden="true" />
+          </button>
+          <button type="button" className="quick-tile" onClick={() => onViewChange("favorites")}>
+            <Heart aria-hidden="true" />
+          </button>
+          <button type="button" className="quick-tile dashed" onClick={onAddFolder}>
+            <FolderPlus aria-hidden="true" />
+          </button>
         </div>
 
         <nav className="main-nav" aria-label="主导航">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const count =
+              item.count === "favorites"
+                ? favoriteCount
+                : item.count === "recent"
+                  ? recentCount
+                  : tracks.length;
             return (
               <button
                 className={item.id === activeView ? "nav-item active" : "nav-item"}
@@ -65,80 +117,71 @@ export function AppShell({
               >
                 <Icon aria-hidden="true" />
                 <span>{item.label}</span>
+                <b>{count}</b>
               </button>
             );
           })}
         </nav>
 
-        <div className="source-summary">
-          <p className="section-label">来源</p>
-          <strong>{settings?.folders.length ?? 0}</strong>
-          <span>个文件夹</span>
-        </div>
-
-        <div className="source-summary">
-          <p className="section-label">曲目</p>
-          <strong>{tracks.length}</strong>
-          <span>首音乐</span>
-        </div>
-
-        <button className="secondary-button full-width" type="button" onClick={onScan}>
-          <RefreshCw className={isScanning ? "spin" : ""} aria-hidden="true" />
-          <span>{isScanning ? "扫描中" : "重新扫描"}</span>
-        </button>
-
-        <div className="sidebar-now">
-          <p className="section-label">当前</p>
-          <strong>{selectedTrack?.title ?? "还没有播放"}</strong>
-          <span>{selectedTrack?.artist ?? "从曲库选择音乐"}</span>
-        </div>
+        <section className="sidebar-section">
+          <div className="section-title">
+            <span>本地来源</span>
+            <button type="button" onClick={onOpenFolderManager} title="管理文件夹">
+              <Settings aria-hidden="true" />
+            </button>
+          </div>
+          <button className="source-card" type="button" onClick={onOpenFolderManager}>
+            <strong>{settings?.folders.length ?? 0}</strong>
+            <span>个文件夹</span>
+          </button>
+          <button className="source-card" type="button" onClick={onScan}>
+            <strong>{tracks.length}</strong>
+            <span>{isScanning ? "正在整理" : "首曲目"}</span>
+          </button>
+        </section>
       </aside>
 
-      <main className="main-panel">{children}</main>
-
-      <aside className="right-rail">
-        <p className="eyebrow">Now Playing</p>
-        <EmptyArtwork
-          title={selectedTrack?.title ?? "未选择曲目"}
-          imagePath={selectedTrack?.coverPath}
-          size="md"
-        />
-        <div className="rail-track">
-          <strong>{selectedTrack?.title ?? "未选择曲目"}</strong>
-          <span>{selectedTrack?.artist ?? "ADOFAI Music Box"}</span>
-        </div>
-        <div className="rail-stats">
-          <StatPill label="BPM" value={selectedTrack ? `${Math.round(selectedTrack.bpm)}` : "--"} />
-          <StatPill label="时长" value={formatDuration(selectedTrack?.duration ?? 0)} />
-        </div>
-        <div className="rail-list">
-          <div>
-            <span>谱师</span>
-            <strong>{selectedTrack?.author ?? "--"}</strong>
+      <section className="content-shell">
+        <header
+          className="titlebar"
+          onMouseDown={handleTitlebarMouseDown}
+          onDoubleClick={handleTitlebarDoubleClick}
+        >
+          <div className="history-controls" data-no-window-drag>
+            <button type="button" title="后退">
+              <ChevronLeft aria-hidden="true" />
+            </button>
+            <button type="button" title="前进">
+              <ChevronRight aria-hidden="true" />
+            </button>
           </div>
-          <div>
-            <span>视频</span>
-            <strong>{selectedTrack?.hasVideo ? "有" : "无"}</strong>
+          <label className="global-search" data-no-window-drag>
+            <Search aria-hidden="true" />
+            <input
+              value={searchQuery}
+              onChange={(event) => onSearchChange(event.currentTarget.value)}
+              placeholder="搜索音乐"
+            />
+          </label>
+          <div className="titlebar-spacer" />
+          <div className="window-controls" data-no-window-drag>
+            <button type="button" title="最小化" onClick={() => void runWindowAction("minimize")}>
+              <Minimize aria-hidden="true" />
+            </button>
+            <button type="button" title="最大化" onClick={() => void runWindowAction("maximize")}>
+              <Maximize2 aria-hidden="true" />
+            </button>
+            <button type="button" title="关闭" onClick={() => void runWindowAction("close")}>
+              <X aria-hidden="true" />
+            </button>
           </div>
-          <div>
-            <span>状态</span>
-            <strong>{selectedTrack ? statusText(selectedTrack.parseStatus) : "--"}</strong>
-          </div>
-        </div>
-      </aside>
+        </header>
+        <main className="main-panel">{children}</main>
+      </section>
     </div>
   );
 }
 
-function statusText(status: TrackSummary["parseStatus"]) {
-  switch (status) {
-    case "ok":
-      return "正常";
-    case "lenient":
-      return "兼容";
-    case "warning":
-      return "留意";
-    case "error":
-      return "不可播放";
-  }
+function shouldSkipWindowDrag(target: EventTarget) {
+  return target instanceof Element && Boolean(target.closest("[data-no-window-drag]"));
 }

@@ -15,13 +15,17 @@ pub struct LibrarySettings {
     pub default_cover_mode: DefaultCoverMode,
     pub audio_asset_root: Option<String>,
     pub lenient_parsing: bool,
+    #[serde(default)]
+    pub favorite_track_ids: Vec<String>,
+    #[serde(default)]
+    pub recent_track_ids: Vec<String>,
 }
 
 impl Default for LibrarySettings {
     fn default() -> Self {
         Self {
             folders: Vec::new(),
-            theme: ThemeMode::Dark,
+            theme: ThemeMode::Light,
             music_volume: default_music_volume(),
             hit_sound_volume: 0.82,
             play_sound_volume: 0.78,
@@ -29,6 +33,8 @@ impl Default for LibrarySettings {
             default_cover_mode: DefaultCoverMode::Generated,
             audio_asset_root: None,
             lenient_parsing: true,
+            favorite_track_ids: Vec::new(),
+            recent_track_ids: Vec::new(),
         }
     }
 }
@@ -76,6 +82,7 @@ pub struct TrackSummary {
     pub cover_path: Option<String>,
     pub icon_path: Option<String>,
     pub audio_path: Option<String>,
+    pub audio_file_size: Option<u64>,
     pub video_path: Option<String>,
     pub has_video: bool,
     pub parse_status: ParseStatus,
