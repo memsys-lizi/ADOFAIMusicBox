@@ -24,6 +24,7 @@ import {
   hasTauriBridge,
   listTracks,
   saveSettings,
+  saveTrackCache,
   scanLibrary,
 } from "./lib/tauri";
 import type {
@@ -111,10 +112,10 @@ function App() {
       setSettings(nextSettings);
       const cachedTracks = normalizeTracks(await listTracks());
       setTracks(cachedTracks);
-      if (cachedTracks.length === 0 && nextSettings.folders.length > 0) {
-        await refreshLibrary();
-      } else if (cachedTracks.length > 0) {
+      if (cachedTracks.length > 0) {
         setSelectedTrack(cachedTracks[0]);
+      } else if (nextSettings.folders.length > 0 || nextSettings.adofaiFiles.length > 0) {
+        window.setTimeout(() => void refreshLibrary(), 80);
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -192,12 +193,14 @@ function App() {
         ),
       });
       await persistSettings(restored);
-      setTracks((currentTracks) => sortTracksByTitle([
-        ...currentTracks.filter(
+      const nextTracks = sortTracksByTitle([
+        ...tracks.filter(
           (track) => track.id !== summary.id && !samePath(track.adofaiPath, summary.adofaiPath),
         ),
         summary,
-      ]));
+      ]);
+      setTracks(nextTracks);
+      persistTrackCache(nextTracks);
       if (!selectedTrack) {
         setSelectedTrack(summary);
       }
@@ -312,6 +315,7 @@ function App() {
 
     const visibleTracks = tracks.filter((item) => item.id !== track.id);
     setTracks(visibleTracks);
+    persistTrackCache(visibleTracks);
     if (selectedTrack?.id === track.id) {
       audio.pause();
       setSelectedTrack(visibleTracks[0] ?? null);
@@ -360,12 +364,17 @@ function App() {
   function removeVisibleTracks(shouldRemove: (track: TrackSummary) => boolean) {
     const nextTracks = tracks.filter((track) => !shouldRemove(track));
     setTracks(nextTracks);
+    persistTrackCache(nextTracks);
     if (selectedTrack && shouldRemove(selectedTrack)) {
       audio.pause();
       setSelectedTrack(nextTracks[0] ?? null);
       setTimeline(null);
       setLoadedTrackId(null);
     }
+  }
+
+  function persistTrackCache(nextTracks: TrackSummary[]) {
+    void saveTrackCache(nextTracks).catch((err: unknown) => setError(errorMessage(err)));
   }
 
   function addHiddenTrack(settings: LibrarySettings, track: TrackSummary) {

@@ -2,7 +2,8 @@ mod adofai;
 
 use adofai::commands::{
     add_library_file, add_library_folder, build_audio_timeline, get_settings, get_track_detail,
-    get_track_summary, list_tracks, resolve_asset_path, save_settings, scan_library, AppState,
+    get_track_summary, list_tracks, resolve_asset_path, save_settings, save_track_cache,
+    scan_library, AppState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,7 +22,8 @@ pub fn run() {
             build_audio_timeline,
             resolve_asset_path,
             get_settings,
-            save_settings
+            save_settings,
+            save_track_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

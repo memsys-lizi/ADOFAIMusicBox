@@ -69,6 +69,13 @@ export function listTracks(): Promise<TrackSummary[]> {
   return invoke("list_tracks");
 }
 
+export function saveTrackCache(tracks: TrackSummary[]): Promise<void> {
+  if (!hasTauriBridge()) {
+    return Promise.resolve();
+  }
+  return invoke("save_track_cache", { tracks });
+}
+
 export function getTrackDetail(adofaiPath: string): Promise<TrackDetail> {
   if (!hasTauriBridge()) {
     return Promise.reject(new Error("请在桌面应用中打开本地曲目"));
