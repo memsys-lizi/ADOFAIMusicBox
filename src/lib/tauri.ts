@@ -76,6 +76,13 @@ export function getTrackDetail(adofaiPath: string): Promise<TrackDetail> {
   return invoke("get_track_detail", { adofaiPath });
 }
 
+export function getTrackSummary(adofaiPath: string): Promise<TrackSummary> {
+  if (!hasTauriBridge()) {
+    return Promise.reject(new Error("请在桌面应用中打开本地曲目"));
+  }
+  return invoke("get_track_summary", { adofaiPath });
+}
+
 export function buildAudioTimeline(adofaiPath: string): Promise<AudioTimeline> {
   if (!hasTauriBridge()) {
     return Promise.reject(new Error("请在桌面应用中播放本地曲目"));

@@ -20,6 +20,7 @@ import {
   addLibraryFolder,
   buildAudioTimeline,
   getSettings,
+  getTrackSummary,
   hasTauriBridge,
   listTracks,
   saveSettings,
@@ -182,8 +183,24 @@ function App() {
   async function handleAddFile(file: string) {
     try {
       const next = normalizeSettings(await addLibraryFile(file));
-      setSettings(next);
-      await refreshLibrary();
+      const summary = normalizeTrack(await getTrackSummary(file));
+      const restored = normalizeSettings({
+        ...next,
+        hiddenTrackIds: next.hiddenTrackIds.filter((id) => id !== summary.id),
+        hiddenTracks: next.hiddenTracks.filter(
+          (track) => track.id !== summary.id && !samePath(track.adofaiPath, summary.adofaiPath),
+        ),
+      });
+      await persistSettings(restored);
+      setTracks((currentTracks) => sortTracksByTitle([
+        ...currentTracks.filter(
+          (track) => track.id !== summary.id && !samePath(track.adofaiPath, summary.adofaiPath),
+        ),
+        summary,
+      ]));
+      if (!selectedTrack) {
+        setSelectedTrack(summary);
+      }
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -674,6 +691,12 @@ function normalizeSettings(settings: LibrarySettings): LibrarySettings {
 
 function normalizeTracks(tracks: TrackSummary[]) {
   return tracks.map(normalizeTrack);
+}
+
+function sortTracksByTitle(tracks: TrackSummary[]) {
+  return [...tracks].sort((left, right) =>
+    left.title.toLowerCase().localeCompare(right.title.toLowerCase(), "zh-CN"),
+  );
 }
 
 function normalizeTrack(track: TrackSummary): TrackSummary {

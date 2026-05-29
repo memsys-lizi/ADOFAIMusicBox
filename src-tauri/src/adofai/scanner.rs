@@ -89,7 +89,7 @@ pub fn detail_from_path(path: &Path, lenient: bool) -> Result<TrackDetail, Strin
     })
 }
 
-fn summary_from_path(path: &Path, lenient: bool) -> TrackSummary {
+pub fn summary_from_path(path: &Path, lenient: bool) -> TrackSummary {
     match parse_level_file(path, lenient) {
         Ok(parsed) => {
             let mut warnings = parsed.warnings.clone();

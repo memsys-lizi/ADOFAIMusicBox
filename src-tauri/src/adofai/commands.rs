@@ -1,5 +1,5 @@
 use super::models::{AudioTimeline, LibrarySettings, TrackDetail, TrackSummary};
-use super::scanner::{detail_from_path, scan_sources};
+use super::scanner::{detail_from_path, scan_sources, summary_from_path};
 use super::settings::{load_settings, save_settings as persist_settings};
 use super::timeline::build_timeline_from_path;
 use std::path::Path;
@@ -146,6 +146,23 @@ pub fn get_track_detail(
         .map_err(|_| "设置状态已损坏".to_string())?
         .lenient_parsing;
     detail_from_path(Path::new(&adofai_path), lenient)
+}
+
+#[tauri::command]
+pub fn get_track_summary(
+    state: tauri::State<'_, AppState>,
+    adofai_path: String,
+) -> Result<TrackSummary, String> {
+    let path = Path::new(&adofai_path);
+    if !path.exists() || !path.is_file() {
+        return Err("谱面文件不存在".to_string());
+    }
+    let lenient = state
+        .settings
+        .lock()
+        .map_err(|_| "设置状态已损坏".to_string())?
+        .lenient_parsing;
+    Ok(summary_from_path(path, lenient))
 }
 
 #[tauri::command]
