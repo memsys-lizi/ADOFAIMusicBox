@@ -39,6 +39,7 @@ import type {
 } from "../../types/domain";
 
 interface FullPlayerOverlayProps {
+  open: boolean;
   track: TrackSummary | null;
   timeline: AudioTimeline | null;
   isPlaying: boolean;
@@ -60,6 +61,7 @@ interface FullPlayerOverlayProps {
 }
 
 export function FullPlayerOverlay({
+  open,
   track,
   timeline,
   isPlaying,
@@ -90,6 +92,7 @@ export function FullPlayerOverlay({
   const videoSource = toAssetUrl(track?.videoPath);
   const hasVideo = Boolean(track?.hasVideo && videoSource);
   const videoActive = Boolean(hasVideo && videoEnabled);
+  const parked = !open && !closing;
   const safeDuration = duration || timeline?.duration || track?.duration || 0;
   const seekMax = Math.max(1, safeDuration);
   const progressStyle = {
@@ -120,10 +123,8 @@ export function FullPlayerOverlay({
     "--player-bg-b": palette.backgroundB,
     "--player-soft": palette.soft,
   } as CSSProperties;
-  const artworkTransitionStyle = { viewTransitionName: "player-artwork" } as CSSProperties;
-
   useLayoutEffect(() => {
-    if (!openSourceRect || closing || !turntableRef.current) {
+    if (!open || !openSourceRect || closing || !turntableRef.current) {
       setIsOpening(false);
       setEntryStyle(undefined);
       return;
@@ -145,7 +146,7 @@ export function FullPlayerOverlay({
 
     const frame = requestAnimationFrame(() => setIsOpening(false));
     return () => cancelAnimationFrame(frame);
-  }, [closing, openSourceRect, track?.id]);
+  }, [closing, open, openSourceRect, track?.id]);
 
   useEffect(() => {
     setVideoEnabled(true);
@@ -217,12 +218,14 @@ export function FullPlayerOverlay({
     <section
       className={[
         "player-overlay",
+        parked ? "parked" : "",
         closing ? "closing" : "",
         videoActive ? "video-active" : "",
       ]
         .filter(Boolean)
         .join(" ")}
       style={style}
+      aria-hidden={parked}
     >
       {videoActive && videoSource && (
         <>
@@ -271,7 +274,6 @@ export function FullPlayerOverlay({
             <img className="turntable-image" src={turntablePlayer} alt="" aria-hidden="true" />
             <div
               className={isPlaying ? "turntable-artwork spinning" : "turntable-artwork"}
-              style={artworkTransitionStyle}
             >
               <img src={cover} alt={`${track?.title ?? "音乐"} 封面`} />
             </div>

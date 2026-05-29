@@ -528,22 +528,9 @@ function App() {
   }
 
   function handleOpenPlayer(sourceRect?: PlayerOpenSourceRect) {
-    const showPlayer = () => {
-      setPlayerOpenSource(sourceRect ?? null);
-      setPlayerClosing(false);
-      setPlayerOpen(true);
-    };
-
-    const transitionDocument = document as Document & {
-      startViewTransition?: (callback: () => void) => void;
-    };
-
-    if (!playerOpen && transitionDocument.startViewTransition) {
-      transitionDocument.startViewTransition(showPlayer);
-      return;
-    }
-
-    showPlayer();
+    setPlayerOpenSource(sourceRect ?? null);
+    setPlayerClosing(false);
+    setPlayerOpen(true);
   }
 
   function handleClosePlayer() {
@@ -611,7 +598,6 @@ function App() {
         playSoundVolume={settings?.playSoundVolume ?? 0.78}
         playbackMode={settings?.playbackMode ?? "sequence"}
         isFavorite={selectedIsFavorite}
-        isPlayerOpen={playerOpen && !playerClosing}
         onOpenPlayer={handleOpenPlayer}
         onPlayPause={handlePlayPause}
         onPrevious={handlePreviousTrack}
@@ -624,8 +610,9 @@ function App() {
         onToggleFavorite={() => handleToggleFavorite()}
       />
 
-      {playerOpen && (
+      {(playerOpen || selectedTrack?.hasVideo) && (
         <FullPlayerOverlay
+          open={playerOpen}
           track={selectedTrack}
           timeline={timeline}
           isPlaying={audio.isPlaying}

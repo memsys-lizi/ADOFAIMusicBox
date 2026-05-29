@@ -25,7 +25,6 @@ interface MiniPlayerProps {
   playSoundVolume: number;
   playbackMode: PlaybackMode;
   isFavorite: boolean;
-  isPlayerOpen: boolean;
   onOpenPlayer: (sourceRect?: PlayerOpenSourceRect) => void;
   onPlayPause: () => void;
   onPrevious: () => void;
@@ -48,7 +47,6 @@ export function MiniPlayer({
   playSoundVolume,
   playbackMode,
   isFavorite,
-  isPlayerOpen,
   onOpenPlayer,
   onPlayPause,
   onPrevious,
@@ -67,9 +65,6 @@ export function MiniPlayer({
   const progressStyle = {
     "--progress": `${Math.min(100, Math.max(0, (currentTime / seekMax) * 100))}%`,
   } as CSSProperties;
-  const artworkTransitionStyle = !isPlayerOpen
-    ? ({ viewTransitionName: "player-artwork" } as CSSProperties)
-    : undefined;
 
   function handleOpenPlayer() {
     const rect = coverRef.current?.getBoundingClientRect();
@@ -85,7 +80,6 @@ export function MiniPlayer({
           type="button"
           onClick={handleOpenPlayer}
           title="打开播放页"
-          style={artworkTransitionStyle}
         >
           <EmptyArtwork title={track?.title ?? "默认封面"} imagePath={track?.coverPath} size="sm" fallback="cover" />
         </button>
