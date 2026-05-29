@@ -42,6 +42,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [folderManagerOpen, setFolderManagerOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [playbackView, setPlaybackView] = useState<AppView>("local");
+  const [locateRequest, setLocateRequest] = useState(0);
 
   const audio = useAdoAudio({
     musicVolume: settings?.musicVolume ?? 1,
@@ -202,9 +204,10 @@ function App() {
     patchSettings({ favoriteTrackIds: [...nextIds] });
   }
 
-  async function handlePlayTrack(track: TrackSummary) {
+  async function handlePlayTrack(track: TrackSummary, sourceView: AppView = activeView) {
     setError(null);
     setSelectedTrack(track);
+    setPlaybackView(sourceView);
     rememberRecent(track.id);
     try {
       await loadTrack(track);
@@ -224,7 +227,7 @@ function App() {
   function handlePlayAll() {
     const first = filteredBySearch(viewTracks, searchQuery)[0] ?? viewTracks[0] ?? tracks[0];
     if (first) {
-      void handlePlayTrack(first);
+      void handlePlayTrack(first, activeView);
     }
   }
 
@@ -237,7 +240,7 @@ function App() {
       ? queue.findIndex((track) => track.id === selectedTrack.id)
       : 0;
     const nextIndex = index <= 0 ? queue.length - 1 : index - 1;
-    void handlePlayTrack(queue[nextIndex]);
+    void handlePlayTrack(queue[nextIndex], activeView);
   }
 
   function handleNextTrack() {
@@ -254,7 +257,7 @@ function App() {
         : index >= queue.length - 1
           ? 0
           : index + 1;
-    void handlePlayTrack(queue[nextIndex]);
+    void handlePlayTrack(queue[nextIndex], activeView);
   }
 
   function handlePlaybackEnded() {
@@ -267,19 +270,19 @@ function App() {
     const index = Math.max(0, queue.findIndex((track) => track.id === current.id));
 
     if (mode === "repeatOne") {
-      void handlePlayTrack(current);
+      void handlePlayTrack(current, playbackView);
       return;
     }
     if (mode === "shuffle") {
-      void handlePlayTrack(queue[randomTrackIndex(index, queue.length)]);
+      void handlePlayTrack(queue[randomTrackIndex(index, queue.length)], playbackView);
       return;
     }
     if (index < queue.length - 1) {
-      void handlePlayTrack(queue[index + 1]);
+      void handlePlayTrack(queue[index + 1], playbackView);
       return;
     }
     if (mode === "repeatAll") {
-      void handlePlayTrack(queue[0]);
+      void handlePlayTrack(queue[0], playbackView);
     }
   }
 
@@ -308,6 +311,19 @@ function App() {
       }
       await audio.play();
     })().catch((err: unknown) => setError(errorMessage(err)));
+  }
+
+  function handleLocatePlaying() {
+    if (!selectedTrack) {
+      return;
+    }
+
+    const targetView = locateViewForTrack(selectedTrack, playbackView, favoriteIds, recentIds);
+    setActiveView(targetView);
+    if (!trackMatchesSearch(selectedTrack, searchQuery)) {
+      setSearchQuery("");
+    }
+    setLocateRequest((request) => request + 1);
   }
 
   return (
@@ -342,8 +358,11 @@ function App() {
           favoriteIds={favoriteIds}
           query={searchQuery}
           isScanning={isScanning}
+          locateRequest={locateRequest}
+          canLocatePlaying={Boolean(loadedTrackId && selectedTrack)}
           onViewChange={setActiveView}
-          onPlayTrack={(track) => void handlePlayTrack(track)}
+          onPlayTrack={(track) => void handlePlayTrack(track, activeView)}
+          onLocatePlaying={handleLocatePlaying}
           onPlayAll={handlePlayAll}
           onToggleFavorite={handleToggleFavorite}
           onAddFolder={() => void chooseAndAddFolder()}
@@ -447,12 +466,33 @@ function filteredBySearch(tracks: TrackSummary[], query: string) {
   if (!normalized) {
     return tracks;
   }
-  return tracks.filter((track) =>
-    [track.title, track.artist, track.author, track.folderPath]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalized),
-  );
+  return tracks.filter((track) => trackMatchesSearch(track, normalized));
+}
+
+function trackMatchesSearch(track: TrackSummary, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return [track.title, track.artist, track.author, track.folderPath]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalized);
+}
+
+function locateViewForTrack(
+  track: TrackSummary,
+  preferredView: AppView,
+  favoriteIds: Set<string>,
+  recentIds: string[],
+): AppView {
+  if (preferredView === "favorites" && favoriteIds.has(track.id)) {
+    return "favorites";
+  }
+  if (preferredView === "recent" && recentIds.includes(track.id)) {
+    return "recent";
+  }
+  return "local";
 }
 
 function queueTracks(viewTracks: TrackSummary[], allTracks: TrackSummary[]) {

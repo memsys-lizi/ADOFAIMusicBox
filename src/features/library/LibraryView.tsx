@@ -4,12 +4,13 @@ import {
   Grid2X2,
   Heart,
   List,
+  LocateFixed,
   MoreHorizontal,
   Play,
   Plus,
   Search,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration, formatFileSize } from "../../lib/format";
 import type { AppView, TrackSummary } from "../../types/domain";
@@ -24,8 +25,11 @@ interface LibraryViewProps {
   favoriteIds: Set<string>;
   query: string;
   isScanning: boolean;
+  locateRequest: number;
+  canLocatePlaying: boolean;
   onViewChange: (view: AppView) => void;
   onPlayTrack: (track: TrackSummary) => void;
+  onLocatePlaying: () => void;
   onPlayAll: () => void;
   onToggleFavorite: (track: TrackSummary) => void;
   onAddFolder: () => void;
@@ -46,8 +50,11 @@ export function LibraryView({
   favoriteIds,
   query,
   isScanning,
+  locateRequest,
+  canLocatePlaying,
   onViewChange,
   onPlayTrack,
+  onLocatePlaying,
   onPlayAll,
   onToggleFavorite,
   onAddFolder,
@@ -57,6 +64,7 @@ export function LibraryView({
   const [layout, setLayout] = useState<LayoutMode>("list");
   const [sortMode, setSortMode] = useState<SortMode>("title");
   const [menuOpen, setMenuOpen] = useState(false);
+  const itemRefs = useRef(new Map<string, HTMLDivElement>());
 
   const shownTracks = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -71,6 +79,31 @@ export function LibraryView({
 
     return [...filtered].sort((a, b) => compareTracks(a, b, sortMode));
   }, [query, sortMode, tracks]);
+
+  useEffect(() => {
+    if (!locateRequest || !selectedTrack) {
+      return;
+    }
+
+    const node = itemRefs.current.get(selectedTrack.id);
+    if (!node) {
+      return;
+    }
+
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+    node.classList.remove("locate-pulse");
+    window.requestAnimationFrame(() => node.classList.add("locate-pulse"));
+    const timer = window.setTimeout(() => node.classList.remove("locate-pulse"), 1100);
+    return () => window.clearTimeout(timer);
+  }, [locateRequest]);
+
+  function setTrackRef(trackId: string, node: HTMLDivElement | null) {
+    if (node) {
+      itemRefs.current.set(trackId, node);
+    } else {
+      itemRefs.current.delete(trackId);
+    }
+  }
 
   return (
     <section className="library-page">
@@ -207,6 +240,7 @@ export function LibraryView({
               track={track}
               selected={selectedTrack?.id === track.id}
               favorite={favoriteIds.has(track.id)}
+              trackRef={(node) => setTrackRef(track.id, node)}
               onPlayTrack={onPlayTrack}
               onToggleFavorite={onToggleFavorite}
             />
@@ -220,11 +254,23 @@ export function LibraryView({
               track={track}
               selected={selectedTrack?.id === track.id}
               favorite={favoriteIds.has(track.id)}
+              trackRef={(node) => setTrackRef(track.id, node)}
               onPlayTrack={onPlayTrack}
               onToggleFavorite={onToggleFavorite}
             />
           ))}
         </div>
+      )}
+
+      {canLocatePlaying && (
+        <button
+          className="locate-playing-button"
+          type="button"
+          onClick={onLocatePlaying}
+          title="定位当前播放"
+        >
+          <LocateFixed aria-hidden="true" />
+        </button>
       )}
     </section>
   );
@@ -234,13 +280,15 @@ interface TrackItemProps {
   track: TrackSummary;
   selected: boolean;
   favorite: boolean;
+  trackRef: (node: HTMLDivElement | null) => void;
   onPlayTrack: (track: TrackSummary) => void;
   onToggleFavorite: (track: TrackSummary) => void;
 }
 
-function TrackRow({ track, selected, favorite, onPlayTrack, onToggleFavorite }: TrackItemProps) {
+function TrackRow({ track, selected, favorite, trackRef, onPlayTrack, onToggleFavorite }: TrackItemProps) {
   return (
     <div
+      ref={trackRef}
       className={selected ? "track-row selected" : "track-row"}
       role="button"
       tabIndex={0}
@@ -279,9 +327,9 @@ function TrackRow({ track, selected, favorite, onPlayTrack, onToggleFavorite }: 
   );
 }
 
-function TrackCard({ track, selected, favorite, onPlayTrack, onToggleFavorite }: TrackItemProps) {
+function TrackCard({ track, selected, favorite, trackRef, onPlayTrack, onToggleFavorite }: TrackItemProps) {
   return (
-    <div className={selected ? "track-card selected" : "track-card"}>
+    <div ref={trackRef} className={selected ? "track-card selected" : "track-card"}>
       <button className="cover-play" type="button" onClick={() => onPlayTrack(track)}>
         <EmptyArtwork title={track.title} imagePath={track.coverPath} size="md" />
         <span>

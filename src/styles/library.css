@@ -1,4 +1,5 @@
 .library-page {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
@@ -172,6 +173,11 @@
   background: #f0f0f0;
 }
 
+.track-row.locate-pulse,
+.track-card.locate-pulse {
+  animation: locatePulse 1100ms ease;
+}
+
 .song-cell {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -337,4 +343,45 @@
 .empty-icon svg {
   width: 24px;
   height: 24px;
+}
+
+.locate-playing-button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 6;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+  color: #9aa0a6;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.045);
+  backdrop-filter: blur(12px);
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.locate-playing-button:hover {
+  color: #5f6368;
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.locate-playing-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes locatePulse {
+  0% {
+    background: color-mix(in srgb, var(--active) 20%, #ffffff);
+  }
+  100% {
+    background: inherit;
+  }
 }
