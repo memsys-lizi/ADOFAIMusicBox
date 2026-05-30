@@ -43,6 +43,7 @@ export interface LibrarySettings {
   folders: string[];
   adofaiFiles: string[];
   theme: ThemeMode;
+  masterVolume: number;
   musicVolume: number;
   hitSoundVolume: number;
   playSoundVolume: number;

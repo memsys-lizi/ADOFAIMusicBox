@@ -1,3 +1,4 @@
+use super::conditions::ConditionContext;
 use super::parser::{
     array_at, clean_display_text, event_type, filename_stem, number_setting, parse_level_file,
     resolve_sibling, settings_map, sound_ref_at, string_setting,
@@ -144,7 +145,8 @@ fn summary_from_parsed(
     warnings: &mut Vec<String>,
 ) -> TrackSummary {
     let settings = settings_map(root);
-    let song_ref = first_play_song(root)
+    let condition_context = ConditionContext::single_player(root);
+    let song_ref = first_play_song(root, &condition_context)
         .map(|event| sound_ref_at(event, "song", "sndOrientalTechno"))
         .unwrap_or_else(|| super::parser::SoundRef::new("sndOrientalTechno"));
     let audio_path = resolve_level_audio(path, &song_ref.filename)
@@ -189,7 +191,7 @@ fn summary_from_parsed(
     let author = clean_display_text(
         &string_setting(&settings, "author").unwrap_or_else(|| "未知谱师".to_string()),
     );
-    let bpm = first_play_song(root)
+    let bpm = first_play_song(root, &condition_context)
         .map(|event| super::parser::value_as_f64(event.get("beatsPerMinute"), 100.0))
         .unwrap_or_else(|| number_setting(&settings, "bpm", 100.0));
     let duration = build_timeline_from_root(root, path, false)
@@ -304,10 +306,10 @@ fn supported_audio_events(counts: &BTreeMap<String, usize>) -> Vec<String> {
     .collect()
 }
 
-fn first_play_song(root: &Value) -> Option<&Value> {
+fn first_play_song<'a>(root: &'a Value, condition_context: &ConditionContext) -> Option<&'a Value> {
     array_at(root, "events")
         .into_iter()
-        .find(|event| event_type(event) == Some("PlaySong"))
+        .find(|event| condition_context.event_runs(event) && event_type(event) == Some("PlaySong"))
 }
 
 fn resolve_level_audio(level_path: &Path, filename: &str) -> Option<PathBuf> {

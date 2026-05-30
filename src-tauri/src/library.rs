@@ -137,6 +137,8 @@ pub struct LibrarySettings {
 
     pub theme: ThemeMode,
     #[serde(default = "default_music_volume")]
+    pub master_volume: f32,
+    #[serde(default = "default_music_volume")]
     pub music_volume: f32,
     pub hit_sound_volume: f32,
     pub play_sound_volume: f32,
@@ -217,6 +219,7 @@ impl Default for LibrarySettings {
             folders: Vec::new(),
             adofai_files: Vec::new(),
             theme: ThemeMode::Light,
+            master_volume: default_music_volume(),
             music_volume: default_music_volume(),
             hit_sound_volume: 0.82,
             play_sound_volume: 0.78,

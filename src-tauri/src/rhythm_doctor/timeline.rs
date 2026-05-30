@@ -1,7 +1,7 @@
+use super::conditions::ConditionContext;
 use super::parser::{
-    array_at, event_bar, event_beat, event_is_active, event_sort_order, event_type, filename_stem,
-    parse_level_file, sound_ref_at, value_as_bool, value_as_f64, value_as_i64, value_as_string,
-    SoundRef,
+    array_at, event_bar, event_beat, event_sort_order, event_type, filename_stem, parse_level_file,
+    sound_ref_at, value_as_bool, value_as_f64, value_as_i64, value_as_string, SoundRef,
 };
 use crate::library::{AudioTimeline, HitEvent};
 use serde::Deserialize;
@@ -167,13 +167,14 @@ pub fn build_timeline_from_root(
     level_path: &Path,
     include_events: bool,
 ) -> Result<AudioTimeline, String> {
-    let cpb_changes = collect_cpb_changes(root);
-    let bpm_changes = collect_bpm_changes(root, &cpb_changes);
+    let condition_context = ConditionContext::single_player(root);
+    let cpb_changes = collect_cpb_changes(root, &condition_context);
+    let bpm_changes = collect_bpm_changes(root, &cpb_changes, &condition_context);
     let clock = BeatClock {
         cpb_changes,
         bpm_changes,
     };
-    let song_ref = first_play_song(root)
+    let song_ref = first_play_song(root, &condition_context)
         .map(|event| sound_ref_at(event, "song", "sndOrientalTechno"))
         .unwrap_or_else(|| SoundRef::new("sndOrientalTechno"));
     let pitch = song_ref.pitch.max(0.05) as f64;
@@ -189,7 +190,7 @@ pub fn build_timeline_from_root(
     };
 
     if include_events {
-        append_events(&mut timeline, root, level_path, &clock);
+        append_events(&mut timeline, root, level_path, &clock, &condition_context);
     }
 
     let max_event_time = timeline
@@ -199,24 +200,29 @@ pub fn build_timeline_from_root(
         .chain(timeline.hold_sound_events.iter())
         .map(|event| event.end_time_sec.unwrap_or(event.time_sec))
         .fold(0.0, f64::max);
-    timeline.duration = max_event_time.max(last_event_time(root, &clock) + 4.0);
+    timeline.duration = max_event_time.max(last_event_time(root, &clock, &condition_context) + 4.0);
     Ok(timeline)
 }
 
-fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, clock: &BeatClock) {
+fn append_events(
+    timeline: &mut AudioTimeline,
+    root: &Value,
+    level_path: &Path,
+    clock: &BeatClock,
+    condition_context: &ConditionContext,
+) {
     let mut events = array_at(root, "events");
     events.sort_by(|left, right| event_sort_key(left).cmp(&event_sort_key(right)));
     let mut state = TimelineState::default();
     apply_initial_rows(&mut state, root);
-    let mut warned_conditions = false;
+    let mut saw_runtime_filters = false;
 
     for (index, event) in events.iter().enumerate() {
-        if !event_is_active(event) {
-            continue;
+        if ConditionContext::event_has_filter(event) {
+            saw_runtime_filters = true;
         }
-        if event.get("if").is_some() || event.get("tag").is_some() || event.get("runTag").is_some()
-        {
-            warned_conditions = true;
+        if !condition_context.event_runs(event) {
+            continue;
         }
         match event_type(event) {
             Some("MakeRow") => apply_make_row(&mut state, event),
@@ -235,7 +241,14 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
                 append_classic_beat(timeline, event, level_path, clock, &mut state)
             }
             Some("AddFreeTimeBeat") => append_free_time_beat(
-                timeline, event, &events, index, level_path, clock, &mut state,
+                timeline,
+                event,
+                &events,
+                index,
+                level_path,
+                clock,
+                &mut state,
+                condition_context,
             ),
             Some("PulseFreeTimeBeat") => {}
             Some("AddOneshotBeat") => {
@@ -249,10 +262,10 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
         }
     }
 
-    if warned_conditions {
+    if saw_runtime_filters {
         timeline
             .warnings
-            .push("这个 RD 谱面包含条件或标签事件，播放器按静态时间线处理。".to_string());
+            .push("已按单人模式过滤 RD 条件与标签事件。".to_string());
     }
 }
 
@@ -262,10 +275,10 @@ fn apply_initial_rows(state: &mut TimelineState, root: &Value) {
     }
 }
 
-fn collect_cpb_changes(root: &Value) -> Vec<CpbChange> {
+fn collect_cpb_changes(root: &Value, condition_context: &ConditionContext) -> Vec<CpbChange> {
     let mut changes = vec![CpbChange { bar: 1, cpb: 8 }];
     for event in array_at(root, "events") {
-        if !event_is_active(event) || event_type(event) != Some("SetCrotchetsPerBar") {
+        if !condition_context.event_runs(event) || event_type(event) != Some("SetCrotchetsPerBar") {
             continue;
         }
         changes.push(CpbChange {
@@ -288,8 +301,12 @@ fn dedup_cpb_changes(changes: Vec<CpbChange>) -> Vec<CpbChange> {
         .collect()
 }
 
-fn collect_bpm_changes(root: &Value, cpb_changes: &[CpbChange]) -> Vec<BpmChange> {
-    let base_bpm = first_play_song(root)
+fn collect_bpm_changes(
+    root: &Value,
+    cpb_changes: &[CpbChange],
+    condition_context: &ConditionContext,
+) -> Vec<BpmChange> {
+    let base_bpm = first_play_song(root, condition_context)
         .map(|event| event_bpm(event, 100.0))
         .unwrap_or(100.0)
         .max(1.0);
@@ -298,7 +315,7 @@ fn collect_bpm_changes(root: &Value, cpb_changes: &[CpbChange]) -> Vec<BpmChange
         bpm: base_bpm,
     }];
     for event in array_at(root, "events") {
-        if !event_is_active(event) {
+        if !condition_context.event_runs(event) {
             continue;
         }
         if event_type(event) == Some("SetBeatsPerMinute") {
@@ -691,6 +708,7 @@ fn append_free_time_beat(
     level_path: &Path,
     clock: &BeatClock,
     state: &mut TimelineState,
+    condition_context: &ConditionContext,
 ) {
     let row_id = value_as_i64(event.get("row"), 0);
     let row = state.row(row_id).clone();
@@ -706,7 +724,7 @@ fn append_free_time_beat(
 
     if pulse != 6 {
         for next in events.iter().skip(event_index + 1) {
-            if !event_is_active(next)
+            if !condition_context.event_runs(next)
                 || event_type(next) != Some("PulseFreeTimeBeat")
                 || value_as_i64(next.get("row"), 0) != row_id
             {
@@ -1389,16 +1407,16 @@ fn append_game_sound(
     );
 }
 
-fn first_play_song(root: &Value) -> Option<&Value> {
+fn first_play_song<'a>(root: &'a Value, condition_context: &ConditionContext) -> Option<&'a Value> {
     array_at(root, "events")
         .into_iter()
-        .find(|event| event_is_active(event) && event_type(event) == Some("PlaySong"))
+        .find(|event| condition_context.event_runs(event) && event_type(event) == Some("PlaySong"))
 }
 
-fn last_event_time(root: &Value, clock: &BeatClock) -> f64 {
+fn last_event_time(root: &Value, clock: &BeatClock, condition_context: &ConditionContext) -> f64 {
     array_at(root, "events")
         .into_iter()
-        .filter(|event| event_is_active(event))
+        .filter(|event| condition_context.event_runs(event))
         .map(|event| clock.time_at(event_abs(event, clock)))
         .fold(0.0, f64::max)
 }
@@ -1821,6 +1839,72 @@ mod tests {
         assert_eq!(timeline.play_sound_events.len(), 1);
         assert!((timeline.play_sound_events[0].time_sec - 0.985).abs() < 0.001);
         assert_eq!(timeline.play_sound_events[0].sound_name, "rd:sndShaker");
+    }
+
+    #[test]
+    fn inactive_play_sound_is_not_added() {
+        let root = json!({
+            "events": [
+                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
+                { "type": "PlaySound", "bar": 1, "beat": 2, "active": false, "sound": { "filename": "Muted" } },
+                { "type": "PlaySound", "bar": 1, "beat": 3, "sound": { "filename": "Live" } }
+            ]
+        });
+        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
+        assert!(timeline
+            .play_sound_events
+            .iter()
+            .all(|event| event.sound_name != "rd:sndMuted"));
+        assert!(timeline
+            .play_sound_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndLive"));
+    }
+
+    #[test]
+    fn single_player_filters_two_player_branch_sounds() {
+        let root = json!({
+            "conditionals": [
+                { "type": "PlayerMode", "id": 1, "tag": "1", "twoPlayerMode": true }
+            ],
+            "rows": [
+                { "row": 1, "rowType": "Oneshot", "player": "P1", "pulseSound": "Kick" }
+            ],
+            "events": [
+                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
+                { "type": "SetClapSounds", "bar": 1, "beat": 1, "if": "1d0", "rowType": "Oneshot", "p1Sound": { "filename": "TwoPlayer" } },
+                { "type": "SetClapSounds", "bar": 1, "beat": 1, "if": "~1d0", "rowType": "Oneshot", "p1Sound": { "filename": "SinglePlayer" } },
+                { "type": "AddOneshotBeat", "bar": 1, "beat": 2, "row": 1, "pulseType": "Wave", "tick": 2 }
+            ]
+        });
+        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
+        assert!(timeline.hit_events.iter().any(
+            |event| event.kind == "rd-oneshot-clap" && event.sound_name == "rd:sndSinglePlayer"
+        ));
+        assert!(!timeline
+            .hit_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndTwoPlayer"));
+    }
+
+    #[test]
+    fn tagged_events_do_not_run_without_run_tag() {
+        let root = json!({
+            "events": [
+                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
+                { "type": "PlaySound", "bar": 1, "beat": 2, "tag": "Later", "sound": { "filename": "Blocked" } },
+                { "type": "PlaySound", "bar": 1, "beat": 3, "tag": "Now", "runTag": true, "sound": { "filename": "Allowed" } }
+            ]
+        });
+        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
+        assert!(!timeline
+            .play_sound_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndBlocked"));
+        assert!(timeline
+            .play_sound_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndAllowed"));
     }
 
     #[test]

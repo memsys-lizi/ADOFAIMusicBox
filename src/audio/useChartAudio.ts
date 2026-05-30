@@ -4,6 +4,7 @@ import { resolveAudioSource } from "./audioResources";
 import type { AudioTimeline, HitEvent, TrackSummary } from "../types/domain";
 
 interface UseChartAudioOptions {
+  masterVolume: number;
   musicVolume: number;
   hitSoundVolume: number;
   playSoundVolume: number;
@@ -30,6 +31,7 @@ const SCHEDULER_INTERVAL_MS = 25;
 
 export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
   const contextRef = useRef<AudioContext | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
   const mainGainRef = useRef<GainNode | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const mainBufferRef = useRef<AudioBuffer | null>(null);
@@ -65,15 +67,25 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
     return contextRef.current;
   }, []);
 
+  const ensureMasterGain = useCallback(() => {
+    const context = ensureContext();
+    if (!masterGainRef.current) {
+      masterGainRef.current = context.createGain();
+      masterGainRef.current.gain.value = clampVolume(options.masterVolume);
+      masterGainRef.current.connect(context.destination);
+    }
+    return masterGainRef.current;
+  }, [ensureContext, options.masterVolume]);
+
   const ensureMainGain = useCallback(() => {
     const context = ensureContext();
     if (!mainGainRef.current) {
       mainGainRef.current = context.createGain();
       mainGainRef.current.gain.value = clampVolume(options.musicVolume);
-      mainGainRef.current.connect(context.destination);
+      mainGainRef.current.connect(ensureMasterGain());
     }
     return mainGainRef.current;
-  }, [ensureContext, options.musicVolume]);
+  }, [ensureContext, ensureMasterGain, options.musicVolume]);
 
   const transportTime = useCallback(() => {
     const context = contextRef.current;
@@ -223,7 +235,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       source.playbackRate.value = Math.max(0.05, event.pitch);
       gain.gain.value = Math.max(0, event.volume * multiplier);
       source.connect(gain);
-      gain.connect(context.destination);
+      gain.connect(ensureMasterGain());
       scheduledSourcesRef.current.add(source);
       source.onended = () => {
         scheduledSourcesRef.current.delete(source);
@@ -257,7 +269,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
 
       scheduledRef.current.add(key);
     },
-    [decodeSound, ensureContext],
+    [decodeSound, ensureContext, ensureMasterGain],
   );
 
   const runScheduler = useCallback(() => {
@@ -450,6 +462,14 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
   useEffect(() => {
     playSoundVolumeRef.current = clampVolume(options.playSoundVolume);
   }, [options.playSoundVolume]);
+
+  useEffect(() => {
+    const context = contextRef.current;
+    const gain = masterGainRef.current;
+    if (context && gain) {
+      gain.gain.setTargetAtTime(clampVolume(options.masterVolume), context.currentTime, 0.01);
+    }
+  }, [options.masterVolume]);
 
   useEffect(() => {
     hitSoundsEnabledRef.current = hitSoundsEnabled;

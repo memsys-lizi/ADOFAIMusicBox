@@ -14,12 +14,14 @@ import { type CSSProperties, useRef, useState } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration } from "../../lib/format";
 import type { PlaybackMode, PlayerOpenSourceRect, TrackSummary } from "../../types/domain";
+import { VolumeMixer } from "./VolumeMixer";
 
 interface MiniPlayerProps {
   track: TrackSummary | null;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  masterVolume: number;
   musicVolume: number;
   hitSoundVolume: number;
   playSoundVolume: number;
@@ -30,6 +32,7 @@ interface MiniPlayerProps {
   onPrevious: () => void;
   onNext: () => void;
   onSeek: (time: number) => void;
+  onMasterVolumeChange: (volume: number) => void;
   onMusicVolumeChange: (volume: number) => void;
   onHitSoundVolumeChange: (volume: number) => void;
   onPlaySoundVolumeChange: (volume: number) => void;
@@ -42,6 +45,7 @@ export function MiniPlayer({
   isPlaying,
   currentTime,
   duration,
+  masterVolume,
   musicVolume,
   hitSoundVolume,
   playSoundVolume,
@@ -52,6 +56,7 @@ export function MiniPlayer({
   onPrevious,
   onNext,
   onSeek,
+  onMasterVolumeChange,
   onMusicVolumeChange,
   onHitSoundVolumeChange,
   onPlaySoundVolumeChange,
@@ -143,9 +148,16 @@ export function MiniPlayer({
 
       {mixOpen && (
         <div className="mix-popover">
-          <VolumeSlider label="音乐" value={musicVolume} onChange={onMusicVolumeChange} />
-          <VolumeSlider label="打拍音" value={hitSoundVolume} onChange={onHitSoundVolumeChange} />
-          <VolumeSlider label="音效" value={playSoundVolume} onChange={onPlaySoundVolumeChange} />
+          <VolumeMixer
+            masterVolume={masterVolume}
+            musicVolume={musicVolume}
+            hitSoundVolume={hitSoundVolume}
+            playSoundVolume={playSoundVolume}
+            onMasterVolumeChange={onMasterVolumeChange}
+            onMusicVolumeChange={onMusicVolumeChange}
+            onHitSoundVolumeChange={onHitSoundVolumeChange}
+            onPlaySoundVolumeChange={onPlaySoundVolumeChange}
+          />
         </div>
       )}
     </footer>
@@ -159,29 +171,6 @@ function rectToSource(rect: DOMRect): PlayerOpenSourceRect {
     width: rect.width,
     height: rect.height,
   };
-}
-
-interface VolumeSliderProps {
-  label: string;
-  value: number;
-  onChange: (volume: number) => void;
-}
-
-function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
-  return (
-    <label className="mix-slider">
-      <span>{label}</span>
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={value}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-      <b>{Math.round(value * 100)}%</b>
-    </label>
-  );
 }
 
 function playbackModeLabel(mode: PlaybackMode) {

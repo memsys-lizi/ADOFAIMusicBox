@@ -13,6 +13,7 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  SlidersHorizontal,
   Video,
   VideoOff,
   X,
@@ -31,6 +32,7 @@ import { defaultArtworkSource } from "../../lib/defaultArtwork";
 import { formatCount, formatDuration, formatFileSize } from "../../lib/format";
 import { runWindowAction, startWindowDrag } from "../../lib/window";
 import { useCoverPalette } from "../../hooks/useCoverPalette";
+import { VolumeMixer } from "./VolumeMixer";
 import type {
   AudioTimeline,
   PlaybackMode,
@@ -45,7 +47,10 @@ interface FullPlayerOverlayProps {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  masterVolume: number;
   musicVolume: number;
+  hitSoundVolume: number;
+  playSoundVolume: number;
   playbackMode: PlaybackMode;
   isFavorite: boolean;
   closing: boolean;
@@ -55,7 +60,10 @@ interface FullPlayerOverlayProps {
   onPrevious: () => void;
   onNext: () => void;
   onSeek: (time: number) => void;
+  onMasterVolumeChange: (volume: number) => void;
   onMusicVolumeChange: (volume: number) => void;
+  onHitSoundVolumeChange: (volume: number) => void;
+  onPlaySoundVolumeChange: (volume: number) => void;
   onCyclePlaybackMode: () => void;
   onToggleFavorite: () => void;
 }
@@ -67,7 +75,10 @@ export function FullPlayerOverlay({
   isPlaying,
   currentTime,
   duration,
+  masterVolume,
   musicVolume,
+  hitSoundVolume,
+  playSoundVolume,
   playbackMode,
   isFavorite,
   closing,
@@ -77,7 +88,10 @@ export function FullPlayerOverlay({
   onPrevious,
   onNext,
   onSeek,
+  onMasterVolumeChange,
   onMusicVolumeChange,
+  onHitSoundVolumeChange,
+  onPlaySoundVolumeChange,
   onCyclePlaybackMode,
   onToggleFavorite,
 }: FullPlayerOverlayProps) {
@@ -87,6 +101,7 @@ export function FullPlayerOverlay({
   const [entryStyle, setEntryStyle] = useState<CSSProperties | undefined>();
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [videoInfoOpen, setVideoInfoOpen] = useState(false);
+  const [mixOpen, setMixOpen] = useState(false);
   const fallbackCover = defaultArtworkSource(track?.game, "cover");
   const palette = useCoverPalette(track?.coverPath ?? fallbackCover);
   const cover = toAssetUrl(track?.coverPath) ?? fallbackCover;
@@ -152,6 +167,7 @@ export function FullPlayerOverlay({
   useEffect(() => {
     setVideoEnabled(true);
     setVideoInfoOpen(false);
+    setMixOpen(false);
   }, [track?.id]);
 
   useEffect(() => {
@@ -365,17 +381,28 @@ export function FullPlayerOverlay({
               {videoEnabled ? <Video aria-hidden="true" /> : <VideoOff aria-hidden="true" />}
             </button>
           )}
-          <label className="overlay-volume">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={musicVolume}
-              onChange={(event) => onMusicVolumeChange(Number(event.currentTarget.value))}
-              aria-label="音乐音量"
-            />
-          </label>
+          <button
+            className={mixOpen ? "plain-icon active" : "plain-icon"}
+            type="button"
+            onClick={() => setMixOpen((open) => !open)}
+            title="音量"
+          >
+            <SlidersHorizontal aria-hidden="true" />
+          </button>
+          {mixOpen && (
+            <div className="overlay-mix-popover">
+              <VolumeMixer
+                masterVolume={masterVolume}
+                musicVolume={musicVolume}
+                hitSoundVolume={hitSoundVolume}
+                playSoundVolume={playSoundVolume}
+                onMasterVolumeChange={onMasterVolumeChange}
+                onMusicVolumeChange={onMusicVolumeChange}
+                onHitSoundVolumeChange={onHitSoundVolumeChange}
+                onPlaySoundVolumeChange={onPlaySoundVolumeChange}
+              />
+            </div>
+          )}
         </div>
       </footer>
     </section>

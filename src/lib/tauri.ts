@@ -25,6 +25,7 @@ const browserPreviewSettings: LibrarySettings = {
   folders: [],
   adofaiFiles: [],
   theme: "light",
+  masterVolume: 1,
   musicVolume: 1,
   hitSoundVolume: 0.82,
   playSoundVolume: 0.78,

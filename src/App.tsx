@@ -58,6 +58,7 @@ function App() {
   const [locateRequest, setLocateRequest] = useState(0);
 
   const audio = useChartAudio({
+    masterVolume: settings?.masterVolume ?? 1,
     musicVolume: settings?.musicVolume ?? 1,
     hitSoundVolume: settings?.hitSoundVolume ?? 0.82,
     playSoundVolume: settings?.playSoundVolume ?? 0.78,
@@ -671,6 +672,7 @@ function App() {
         isPlaying={audio.isPlaying}
         currentTime={audio.currentTime}
         duration={duration}
+        masterVolume={settings?.masterVolume ?? 1}
         musicVolume={settings?.musicVolume ?? 1}
         hitSoundVolume={settings?.hitSoundVolume ?? 0.82}
         playSoundVolume={settings?.playSoundVolume ?? 0.78}
@@ -681,6 +683,7 @@ function App() {
         onPrevious={handlePreviousTrack}
         onNext={handleNextTrack}
         onSeek={audio.seek}
+        onMasterVolumeChange={(masterVolume) => patchSettings({ masterVolume })}
         onMusicVolumeChange={(musicVolume) => patchSettings({ musicVolume })}
         onHitSoundVolumeChange={(hitSoundVolume) => patchSettings({ hitSoundVolume })}
         onPlaySoundVolumeChange={(playSoundVolume) => patchSettings({ playSoundVolume })}
@@ -696,7 +699,10 @@ function App() {
           isPlaying={audio.isPlaying}
           currentTime={audio.currentTime}
           duration={duration}
+          masterVolume={settings?.masterVolume ?? 1}
           musicVolume={settings?.musicVolume ?? 1}
+          hitSoundVolume={settings?.hitSoundVolume ?? 0.82}
+          playSoundVolume={settings?.playSoundVolume ?? 0.78}
           playbackMode={settings?.playbackMode ?? "sequence"}
           isFavorite={selectedIsFavorite}
           closing={playerClosing}
@@ -706,7 +712,10 @@ function App() {
           onPrevious={handlePreviousTrack}
           onNext={handleNextTrack}
           onSeek={audio.seek}
+          onMasterVolumeChange={(masterVolume) => patchSettings({ masterVolume })}
           onMusicVolumeChange={(musicVolume) => patchSettings({ musicVolume })}
+          onHitSoundVolumeChange={(hitSoundVolume) => patchSettings({ hitSoundVolume })}
+          onPlaySoundVolumeChange={(playSoundVolume) => patchSettings({ playSoundVolume })}
           onCyclePlaybackMode={cyclePlaybackMode}
           onToggleFavorite={() => handleToggleFavorite()}
         />
@@ -759,6 +768,7 @@ function normalizeSettings(settings: LibrarySettings): LibrarySettings {
     folders: adofaiProfile.folders,
     adofaiFiles: adofaiProfile.files,
     theme: "light",
+    masterVolume: settings.masterVolume ?? 1,
     musicVolume: settings.musicVolume ?? 1,
     hitSoundVolume: settings.hitSoundVolume ?? 0.82,
     playSoundVolume: settings.playSoundVolume ?? 0.78,
