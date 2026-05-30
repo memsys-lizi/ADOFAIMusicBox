@@ -1,15 +1,6 @@
-import {
-  Activity,
-  Heart,
-  Library,
-  ListMusic,
-  Maximize2,
-  Minimize,
-  Music2,
-  Search,
-  X,
-} from "lucide-react";
+import { Heart, Library, Maximize2, Minimize, Music2, Search, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
+import appIcon from "../assets/app-icon.png";
 import { runWindowAction, startWindowDrag } from "../lib/window";
 import type { AppView, GameMode, LibrarySettings, TrackSummary } from "../types/domain";
 
@@ -70,9 +61,9 @@ export function AppShell({
       <aside className="sidebar">
         <div className="brand-card">
           <span className="brand-mark" aria-hidden="true">
-            {activeGame === "rhythmDoctor" ? <Activity /> : <ListMusic />}
+            <img src={appIcon} alt="" />
           </span>
-          <span>
+          <span className="brand-title">
             <strong>{activeGame === "rhythmDoctor" ? "Rhythm Doctor" : "ADOFAI"}</strong>
             <small>Music Box</small>
           </span>
@@ -83,7 +74,7 @@ export function AppShell({
               onClick={() => onGameChange("adofai")}
               title="ADOFAI"
             >
-              A
+              ADOFAI
             </button>
             <button
               className={activeGame === "rhythmDoctor" ? "active" : ""}
@@ -91,7 +82,7 @@ export function AppShell({
               onClick={() => onGameChange("rhythmDoctor")}
               title="Rhythm Doctor"
             >
-              RD
+              节奏医生
             </button>
           </div>
         </div>
