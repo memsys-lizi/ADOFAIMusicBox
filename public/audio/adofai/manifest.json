@@ -1,0 +1,827 @@
+{
+  "game": "adofai",
+  "generatedAt": "2026-05-30T07:22:42.102Z",
+  "files": [
+    {
+      "name": "sndBeepLow.ogg",
+      "stem": "sndBeepLow",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndBeepLow.ogg",
+      "aliases": [
+        "BeepLow",
+        "sndBeepLow",
+        "sndBeepLow.ogg"
+      ]
+    },
+    {
+      "name": "sndChuck.ogg",
+      "stem": "sndChuck",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndChuck.ogg",
+      "aliases": [
+        "Chuck",
+        "sndChuck",
+        "sndChuck.ogg"
+      ]
+    },
+    {
+      "name": "sndClapHit.wav",
+      "stem": "sndClapHit",
+      "extension": "wav",
+      "category": "",
+      "path": "sndClapHit.wav",
+      "aliases": [
+        "ClapHit",
+        "sndClapHit",
+        "sndClapHit.wav"
+      ]
+    },
+    {
+      "name": "sndClapHitEcho.ogg",
+      "stem": "sndClapHitEcho",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndClapHitEcho.ogg",
+      "aliases": [
+        "ClapHitEcho",
+        "sndClapHitEcho",
+        "sndClapHitEcho.ogg"
+      ]
+    },
+    {
+      "name": "sndCymbalCrash.ogg",
+      "stem": "sndCymbalCrash",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndCymbalCrash.ogg",
+      "aliases": [
+        "CymbalCrash",
+        "sndCymbalCrash",
+        "sndCymbalCrash.ogg"
+      ]
+    },
+    {
+      "name": "sndDangerTilePrespin.ogg",
+      "stem": "sndDangerTilePrespin",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndDangerTilePrespin.ogg",
+      "aliases": [
+        "DangerTilePrespin",
+        "sndDangerTilePrespin",
+        "sndDangerTilePrespin.ogg"
+      ]
+    },
+    {
+      "name": "sndDangerTileSpin.ogg",
+      "stem": "sndDangerTileSpin",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndDangerTileSpin.ogg",
+      "aliases": [
+        "DangerTileSpin",
+        "sndDangerTileSpin",
+        "sndDangerTileSpin.ogg"
+      ]
+    },
+    {
+      "name": "sndDangerTileWarning.ogg",
+      "stem": "sndDangerTileWarning",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndDangerTileWarning.ogg",
+      "aliases": [
+        "DangerTileWarning",
+        "sndDangerTileWarning",
+        "sndDangerTileWarning.ogg"
+      ]
+    },
+    {
+      "name": "sndFireTile.ogg",
+      "stem": "sndFireTile",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndFireTile.ogg",
+      "aliases": [
+        "FireTile",
+        "sndFireTile",
+        "sndFireTile.ogg"
+      ]
+    },
+    {
+      "name": "sndHammer.ogg",
+      "stem": "sndHammer",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHammer.ogg",
+      "aliases": [
+        "Hammer",
+        "sndHammer",
+        "sndHammer.ogg"
+      ]
+    },
+    {
+      "name": "sndHat.wav",
+      "stem": "sndHat",
+      "extension": "wav",
+      "category": "",
+      "path": "sndHat.wav",
+      "aliases": [
+        "Hat",
+        "sndHat",
+        "sndHat.wav"
+      ]
+    },
+    {
+      "name": "sndHatHouse.ogg",
+      "stem": "sndHatHouse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHatHouse.ogg",
+      "aliases": [
+        "HatHouse",
+        "sndHatHouse",
+        "sndHatHouse.ogg"
+      ]
+    },
+    {
+      "name": "sndHeldbeatEndFuse.ogg",
+      "stem": "sndHeldbeatEndFuse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHeldbeatEndFuse.ogg",
+      "aliases": [
+        "HeldbeatEndFuse",
+        "sndHeldbeatEndFuse",
+        "sndHeldbeatEndFuse.ogg"
+      ]
+    },
+    {
+      "name": "sndHeldbeatLoopFuse.ogg",
+      "stem": "sndHeldbeatLoopFuse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHeldbeatLoopFuse.ogg",
+      "aliases": [
+        "HeldbeatLoopFuse",
+        "sndHeldbeatLoopFuse",
+        "sndHeldbeatLoopFuse.ogg"
+      ]
+    },
+    {
+      "name": "sndHeldbeatMidFuse.ogg",
+      "stem": "sndHeldbeatMidFuse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHeldbeatMidFuse.ogg",
+      "aliases": [
+        "HeldbeatMidFuse",
+        "sndHeldbeatMidFuse",
+        "sndHeldbeatMidFuse.ogg"
+      ]
+    },
+    {
+      "name": "sndHeldbeatMidSingSing.ogg",
+      "stem": "sndHeldbeatMidSingSing",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHeldbeatMidSingSing.ogg",
+      "aliases": [
+        "HeldbeatMidSingSing",
+        "sndHeldbeatMidSingSing",
+        "sndHeldbeatMidSingSing.ogg"
+      ]
+    },
+    {
+      "name": "sndHeldbeatStartFuse.ogg",
+      "stem": "sndHeldbeatStartFuse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndHeldbeatStartFuse.ogg",
+      "aliases": [
+        "HeldbeatStartFuse",
+        "sndHeldbeatStartFuse",
+        "sndHeldbeatStartFuse.ogg"
+      ]
+    },
+    {
+      "name": "sndIceTile.ogg",
+      "stem": "sndIceTile",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndIceTile.ogg",
+      "aliases": [
+        "IceTile",
+        "sndIceTile",
+        "sndIceTile.ogg"
+      ]
+    },
+    {
+      "name": "sndKick.wav",
+      "stem": "sndKick",
+      "extension": "wav",
+      "category": "",
+      "path": "sndKick.wav",
+      "aliases": [
+        "Kick",
+        "sndKick",
+        "sndKick.wav"
+      ]
+    },
+    {
+      "name": "sndKickChroma.ogg",
+      "stem": "sndKickChroma",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndKickChroma.ogg",
+      "aliases": [
+        "KickChroma",
+        "sndKickChroma",
+        "sndKickChroma.ogg"
+      ]
+    },
+    {
+      "name": "sndKickHouse.ogg",
+      "stem": "sndKickHouse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndKickHouse.ogg",
+      "aliases": [
+        "KickHouse",
+        "sndKickHouse",
+        "sndKickHouse.ogg"
+      ]
+    },
+    {
+      "name": "sndKickRupture.ogg",
+      "stem": "sndKickRupture",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndKickRupture.ogg",
+      "aliases": [
+        "KickRupture",
+        "sndKickRupture",
+        "sndKickRupture.ogg"
+      ]
+    },
+    {
+      "name": "sndMinesweepCount.ogg",
+      "stem": "sndMinesweepCount",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndMinesweepCount.ogg",
+      "aliases": [
+        "MinesweepCount",
+        "sndMinesweepCount",
+        "sndMinesweepCount.ogg"
+      ]
+    },
+    {
+      "name": "sndPowerDown.ogg",
+      "stem": "sndPowerDown",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndPowerDown.ogg",
+      "aliases": [
+        "PowerDown",
+        "sndPowerDown",
+        "sndPowerDown.ogg"
+      ]
+    },
+    {
+      "name": "sndPowerUp.ogg",
+      "stem": "sndPowerUp",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndPowerUp.ogg",
+      "aliases": [
+        "PowerUp",
+        "sndPowerUp",
+        "sndPowerUp.ogg"
+      ]
+    },
+    {
+      "name": "sndPurePerfect.ogg",
+      "stem": "sndPurePerfect",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndPurePerfect.ogg",
+      "aliases": [
+        "PurePerfect",
+        "sndPurePerfect",
+        "sndPurePerfect.ogg"
+      ]
+    },
+    {
+      "name": "sndReverbClack.ogg",
+      "stem": "sndReverbClack",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndReverbClack.ogg",
+      "aliases": [
+        "ReverbClack",
+        "sndReverbClack",
+        "sndReverbClack.ogg"
+      ]
+    },
+    {
+      "name": "sndReverbClap.wav",
+      "stem": "sndReverbClap",
+      "extension": "wav",
+      "category": "",
+      "path": "sndReverbClap.wav",
+      "aliases": [
+        "ReverbClap",
+        "sndReverbClap",
+        "sndReverbClap.wav"
+      ]
+    },
+    {
+      "name": "sndShaker.wav",
+      "stem": "sndShaker",
+      "extension": "wav",
+      "category": "",
+      "path": "sndShaker.wav",
+      "aliases": [
+        "Shaker",
+        "sndShaker",
+        "sndShaker.wav"
+      ]
+    },
+    {
+      "name": "sndShakerLoud.ogg",
+      "stem": "sndShakerLoud",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndShakerLoud.ogg",
+      "aliases": [
+        "ShakerLoud",
+        "sndShakerLoud",
+        "sndShakerLoud.ogg"
+      ]
+    },
+    {
+      "name": "sndSidestick.ogg",
+      "stem": "sndSidestick",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSidestick.ogg",
+      "aliases": [
+        "Sidestick",
+        "sndSidestick",
+        "sndSidestick.ogg"
+      ]
+    },
+    {
+      "name": "sndSizzle.ogg",
+      "stem": "sndSizzle",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSizzle.ogg",
+      "aliases": [
+        "Sizzle",
+        "sndSizzle",
+        "sndSizzle.ogg"
+      ]
+    },
+    {
+      "name": "sndSnareAcoustic2.ogg",
+      "stem": "sndSnareAcoustic2",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSnareAcoustic2.ogg",
+      "aliases": [
+        "SnareAcoustic2",
+        "sndSnareAcoustic2",
+        "sndSnareAcoustic2.ogg"
+      ]
+    },
+    {
+      "name": "sndSnareHouse.ogg",
+      "stem": "sndSnareHouse",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSnareHouse.ogg",
+      "aliases": [
+        "SnareHouse",
+        "sndSnareHouse",
+        "sndSnareHouse.ogg"
+      ]
+    },
+    {
+      "name": "sndSnareVapor.ogg",
+      "stem": "sndSnareVapor",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSnareVapor.ogg",
+      "aliases": [
+        "SnareVapor",
+        "sndSnareVapor",
+        "sndSnareVapor.ogg"
+      ]
+    },
+    {
+      "name": "sndSquareshot.ogg",
+      "stem": "sndSquareshot",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndSquareshot.ogg",
+      "aliases": [
+        "sndSquareshot",
+        "sndSquareshot.ogg",
+        "Squareshot"
+      ]
+    },
+    {
+      "name": "sndStick.ogg",
+      "stem": "sndStick",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndStick.ogg",
+      "aliases": [
+        "sndStick",
+        "sndStick.ogg",
+        "Stick"
+      ]
+    },
+    {
+      "name": "sndVehicleNegative.ogg",
+      "stem": "sndVehicleNegative",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndVehicleNegative.ogg",
+      "aliases": [
+        "sndVehicleNegative",
+        "sndVehicleNegative.ogg",
+        "VehicleNegative"
+      ]
+    },
+    {
+      "name": "sndVehiclePositive.ogg",
+      "stem": "sndVehiclePositive",
+      "extension": "ogg",
+      "category": "",
+      "path": "sndVehiclePositive.ogg",
+      "aliases": [
+        "sndVehiclePositive",
+        "sndVehiclePositive.ogg",
+        "VehiclePositive"
+      ]
+    }
+  ],
+  "aliases": {
+    "beeplow": [
+      "sndBeepLow.ogg"
+    ],
+    "sndbeeplow": [
+      "sndBeepLow.ogg"
+    ],
+    "sndbeeplow.ogg": [
+      "sndBeepLow.ogg"
+    ],
+    "chuck": [
+      "sndChuck.ogg"
+    ],
+    "sndchuck": [
+      "sndChuck.ogg"
+    ],
+    "sndchuck.ogg": [
+      "sndChuck.ogg"
+    ],
+    "claphit": [
+      "sndClapHit.wav"
+    ],
+    "sndclaphit": [
+      "sndClapHit.wav"
+    ],
+    "sndclaphit.wav": [
+      "sndClapHit.wav"
+    ],
+    "claphitecho": [
+      "sndClapHitEcho.ogg"
+    ],
+    "sndclaphitecho": [
+      "sndClapHitEcho.ogg"
+    ],
+    "sndclaphitecho.ogg": [
+      "sndClapHitEcho.ogg"
+    ],
+    "cymbalcrash": [
+      "sndCymbalCrash.ogg"
+    ],
+    "sndcymbalcrash": [
+      "sndCymbalCrash.ogg"
+    ],
+    "sndcymbalcrash.ogg": [
+      "sndCymbalCrash.ogg"
+    ],
+    "dangertileprespin": [
+      "sndDangerTilePrespin.ogg"
+    ],
+    "snddangertileprespin": [
+      "sndDangerTilePrespin.ogg"
+    ],
+    "snddangertileprespin.ogg": [
+      "sndDangerTilePrespin.ogg"
+    ],
+    "dangertilespin": [
+      "sndDangerTileSpin.ogg"
+    ],
+    "snddangertilespin": [
+      "sndDangerTileSpin.ogg"
+    ],
+    "snddangertilespin.ogg": [
+      "sndDangerTileSpin.ogg"
+    ],
+    "dangertilewarning": [
+      "sndDangerTileWarning.ogg"
+    ],
+    "snddangertilewarning": [
+      "sndDangerTileWarning.ogg"
+    ],
+    "snddangertilewarning.ogg": [
+      "sndDangerTileWarning.ogg"
+    ],
+    "firetile": [
+      "sndFireTile.ogg"
+    ],
+    "sndfiretile": [
+      "sndFireTile.ogg"
+    ],
+    "sndfiretile.ogg": [
+      "sndFireTile.ogg"
+    ],
+    "hammer": [
+      "sndHammer.ogg"
+    ],
+    "sndhammer": [
+      "sndHammer.ogg"
+    ],
+    "sndhammer.ogg": [
+      "sndHammer.ogg"
+    ],
+    "hat": [
+      "sndHat.wav"
+    ],
+    "sndhat": [
+      "sndHat.wav"
+    ],
+    "sndhat.wav": [
+      "sndHat.wav"
+    ],
+    "hathouse": [
+      "sndHatHouse.ogg"
+    ],
+    "sndhathouse": [
+      "sndHatHouse.ogg"
+    ],
+    "sndhathouse.ogg": [
+      "sndHatHouse.ogg"
+    ],
+    "heldbeatendfuse": [
+      "sndHeldbeatEndFuse.ogg"
+    ],
+    "sndheldbeatendfuse": [
+      "sndHeldbeatEndFuse.ogg"
+    ],
+    "sndheldbeatendfuse.ogg": [
+      "sndHeldbeatEndFuse.ogg"
+    ],
+    "heldbeatloopfuse": [
+      "sndHeldbeatLoopFuse.ogg"
+    ],
+    "sndheldbeatloopfuse": [
+      "sndHeldbeatLoopFuse.ogg"
+    ],
+    "sndheldbeatloopfuse.ogg": [
+      "sndHeldbeatLoopFuse.ogg"
+    ],
+    "heldbeatmidfuse": [
+      "sndHeldbeatMidFuse.ogg"
+    ],
+    "sndheldbeatmidfuse": [
+      "sndHeldbeatMidFuse.ogg"
+    ],
+    "sndheldbeatmidfuse.ogg": [
+      "sndHeldbeatMidFuse.ogg"
+    ],
+    "heldbeatmidsingsing": [
+      "sndHeldbeatMidSingSing.ogg"
+    ],
+    "sndheldbeatmidsingsing": [
+      "sndHeldbeatMidSingSing.ogg"
+    ],
+    "sndheldbeatmidsingsing.ogg": [
+      "sndHeldbeatMidSingSing.ogg"
+    ],
+    "heldbeatstartfuse": [
+      "sndHeldbeatStartFuse.ogg"
+    ],
+    "sndheldbeatstartfuse": [
+      "sndHeldbeatStartFuse.ogg"
+    ],
+    "sndheldbeatstartfuse.ogg": [
+      "sndHeldbeatStartFuse.ogg"
+    ],
+    "icetile": [
+      "sndIceTile.ogg"
+    ],
+    "sndicetile": [
+      "sndIceTile.ogg"
+    ],
+    "sndicetile.ogg": [
+      "sndIceTile.ogg"
+    ],
+    "kick": [
+      "sndKick.wav"
+    ],
+    "sndkick": [
+      "sndKick.wav"
+    ],
+    "sndkick.wav": [
+      "sndKick.wav"
+    ],
+    "kickchroma": [
+      "sndKickChroma.ogg"
+    ],
+    "sndkickchroma": [
+      "sndKickChroma.ogg"
+    ],
+    "sndkickchroma.ogg": [
+      "sndKickChroma.ogg"
+    ],
+    "kickhouse": [
+      "sndKickHouse.ogg"
+    ],
+    "sndkickhouse": [
+      "sndKickHouse.ogg"
+    ],
+    "sndkickhouse.ogg": [
+      "sndKickHouse.ogg"
+    ],
+    "kickrupture": [
+      "sndKickRupture.ogg"
+    ],
+    "sndkickrupture": [
+      "sndKickRupture.ogg"
+    ],
+    "sndkickrupture.ogg": [
+      "sndKickRupture.ogg"
+    ],
+    "minesweepcount": [
+      "sndMinesweepCount.ogg"
+    ],
+    "sndminesweepcount": [
+      "sndMinesweepCount.ogg"
+    ],
+    "sndminesweepcount.ogg": [
+      "sndMinesweepCount.ogg"
+    ],
+    "powerdown": [
+      "sndPowerDown.ogg"
+    ],
+    "sndpowerdown": [
+      "sndPowerDown.ogg"
+    ],
+    "sndpowerdown.ogg": [
+      "sndPowerDown.ogg"
+    ],
+    "powerup": [
+      "sndPowerUp.ogg"
+    ],
+    "sndpowerup": [
+      "sndPowerUp.ogg"
+    ],
+    "sndpowerup.ogg": [
+      "sndPowerUp.ogg"
+    ],
+    "pureperfect": [
+      "sndPurePerfect.ogg"
+    ],
+    "sndpureperfect": [
+      "sndPurePerfect.ogg"
+    ],
+    "sndpureperfect.ogg": [
+      "sndPurePerfect.ogg"
+    ],
+    "reverbclack": [
+      "sndReverbClack.ogg"
+    ],
+    "sndreverbclack": [
+      "sndReverbClack.ogg"
+    ],
+    "sndreverbclack.ogg": [
+      "sndReverbClack.ogg"
+    ],
+    "reverbclap": [
+      "sndReverbClap.wav"
+    ],
+    "sndreverbclap": [
+      "sndReverbClap.wav"
+    ],
+    "sndreverbclap.wav": [
+      "sndReverbClap.wav"
+    ],
+    "shaker": [
+      "sndShaker.wav"
+    ],
+    "sndshaker": [
+      "sndShaker.wav"
+    ],
+    "sndshaker.wav": [
+      "sndShaker.wav"
+    ],
+    "shakerloud": [
+      "sndShakerLoud.ogg"
+    ],
+    "sndshakerloud": [
+      "sndShakerLoud.ogg"
+    ],
+    "sndshakerloud.ogg": [
+      "sndShakerLoud.ogg"
+    ],
+    "sidestick": [
+      "sndSidestick.ogg"
+    ],
+    "sndsidestick": [
+      "sndSidestick.ogg"
+    ],
+    "sndsidestick.ogg": [
+      "sndSidestick.ogg"
+    ],
+    "sizzle": [
+      "sndSizzle.ogg"
+    ],
+    "sndsizzle": [
+      "sndSizzle.ogg"
+    ],
+    "sndsizzle.ogg": [
+      "sndSizzle.ogg"
+    ],
+    "snareacoustic2": [
+      "sndSnareAcoustic2.ogg"
+    ],
+    "sndsnareacoustic2": [
+      "sndSnareAcoustic2.ogg"
+    ],
+    "sndsnareacoustic2.ogg": [
+      "sndSnareAcoustic2.ogg"
+    ],
+    "snarehouse": [
+      "sndSnareHouse.ogg"
+    ],
+    "sndsnarehouse": [
+      "sndSnareHouse.ogg"
+    ],
+    "sndsnarehouse.ogg": [
+      "sndSnareHouse.ogg"
+    ],
+    "snarevapor": [
+      "sndSnareVapor.ogg"
+    ],
+    "sndsnarevapor": [
+      "sndSnareVapor.ogg"
+    ],
+    "sndsnarevapor.ogg": [
+      "sndSnareVapor.ogg"
+    ],
+    "sndsquareshot": [
+      "sndSquareshot.ogg"
+    ],
+    "sndsquareshot.ogg": [
+      "sndSquareshot.ogg"
+    ],
+    "squareshot": [
+      "sndSquareshot.ogg"
+    ],
+    "sndstick": [
+      "sndStick.ogg"
+    ],
+    "sndstick.ogg": [
+      "sndStick.ogg"
+    ],
+    "stick": [
+      "sndStick.ogg"
+    ],
+    "sndvehiclenegative": [
+      "sndVehicleNegative.ogg"
+    ],
+    "sndvehiclenegative.ogg": [
+      "sndVehicleNegative.ogg"
+    ],
+    "vehiclenegative": [
+      "sndVehicleNegative.ogg"
+    ],
+    "sndvehiclepositive": [
+      "sndVehiclePositive.ogg"
+    ],
+    "sndvehiclepositive.ogg": [
+      "sndVehiclePositive.ogg"
+    ],
+    "vehiclepositive": [
+      "sndVehiclePositive.ogg"
+    ]
+  }
+}

@@ -1,9 +1,10 @@
 import { FileMusic, FolderPlus, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { HiddenTrack } from "../types/domain";
+import type { GameMode, HiddenTrack } from "../types/domain";
 
 interface FolderManagerProps {
   open: boolean;
+  game: GameMode;
   folders: string[];
   files: string[];
   hiddenTracks: HiddenTrack[];
@@ -21,6 +22,7 @@ type SourceTab = "folders" | "files" | "removed";
 
 export function FolderManager({
   open,
+  game,
   folders,
   files,
   hiddenTracks,
@@ -35,6 +37,7 @@ export function FolderManager({
 }: FolderManagerProps) {
   const [activeTab, setActiveTab] = useState<SourceTab>("folders");
   const [query, setQuery] = useState("");
+  const fileLabel = game === "rhythmDoctor" ? "添加 RD 谱面" : "添加 ADOFAI 谱面";
   const activeSources = activeTab === "folders" ? folders : activeTab === "files" ? files : [];
   const filteredSources = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -49,7 +52,7 @@ export function FolderManager({
       return hiddenTracks;
     }
     return hiddenTracks.filter((track) =>
-      [track.title, track.artist, track.author, track.adofaiPath, track.folderPath]
+      [track.title, track.artist, track.author, track.chartPath, track.folderPath]
         .join(" ")
         .toLowerCase()
         .includes(normalized),
@@ -79,7 +82,7 @@ export function FolderManager({
           </button>
           <button className="pill-button" type="button" onClick={onAddFile}>
             <FileMusic aria-hidden="true" />
-            <span>添加单曲</span>
+            <span>{fileLabel}</span>
           </button>
           <button className="pill-button" type="button" onClick={onScan}>
             <RefreshCw className={isScanning ? "spinning-icon" : ""} aria-hidden="true" />
@@ -126,11 +129,11 @@ export function FolderManager({
               <div className="folder-empty">{emptyText(activeTab, query)}</div>
             ) : (
               filteredHiddenTracks.map((track) => (
-                <div className="folder-row source-row" key={`${track.id}-${track.adofaiPath}`}>
-                  <span title={track.adofaiPath || track.id}>
+                <div className="folder-row source-row" key={`${track.id}-${track.chartPath}`}>
+                  <span title={track.chartPath || track.id}>
                     <strong>{track.title}</strong>
                     <small>{track.artist}</small>
-                    <small>{track.adofaiPath || track.id}</small>
+                    <small>{track.chartPath || track.id}</small>
                   </span>
                   <button
                     className="restore-source-button"

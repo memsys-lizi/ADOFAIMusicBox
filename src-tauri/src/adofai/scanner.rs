@@ -1,9 +1,11 @@
-use super::models::{HiddenTrack, ParseStatus, ResourceStatus, TrackDetail, TrackSummary};
 use super::parser::{
     array_at, clean_display_text, event_type, number_setting, parse_level_file, resolve_sibling,
     settings_map, string_setting,
 };
 use super::timeline::build_timeline_from_root;
+use crate::library::{
+    GameMode, HiddenTrack, ParseStatus, ResourceStatus, TrackDetail, TrackSummary,
+};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -56,12 +58,12 @@ pub fn scan_sources(
         hidden_ids.extend(hidden_tracks.iter().map(|track| track.id.as_str()));
         let hidden_paths: HashSet<String> = hidden_tracks
             .iter()
-            .filter(|track| !track.adofai_path.is_empty())
-            .map(|track| normalize_path_key(&track.adofai_path))
+            .filter(|track| !track.effective_chart_path().is_empty())
+            .map(|track| normalize_path_key(track.effective_chart_path()))
             .collect();
         tracks.retain(|track| {
             !hidden_ids.contains(track.id.as_str())
-                && !hidden_paths.contains(&normalize_path_key(&track.adofai_path))
+                && !hidden_paths.contains(&normalize_path_key(track.effective_chart_path()))
         });
     }
 
@@ -103,6 +105,8 @@ pub fn summary_from_path(path: &Path, lenient: bool) -> TrackSummary {
                 .to_string();
             TrackSummary {
                 id: stable_id(path),
+                game: GameMode::AdoFai,
+                chart_path: path.to_string_lossy().to_string(),
                 adofai_path: path.to_string_lossy().to_string(),
                 folder_path: path
                     .parent()
@@ -181,6 +185,8 @@ fn summary_from_parsed(
 
     TrackSummary {
         id: stable_id(path),
+        game: GameMode::AdoFai,
+        chart_path: path.to_string_lossy().to_string(),
         adofai_path: path.to_string_lossy().to_string(),
         folder_path: path
             .parent()

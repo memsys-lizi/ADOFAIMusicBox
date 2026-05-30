@@ -1,4 +1,5 @@
 import {
+  Activity,
   Heart,
   Library,
   ListMusic,
@@ -10,16 +11,19 @@ import {
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { runWindowAction, startWindowDrag } from "../lib/window";
-import type { AppView, LibrarySettings, TrackSummary } from "../types/domain";
+import type { AppView, GameMode, LibrarySettings, TrackSummary } from "../types/domain";
 
 interface AppShellProps {
+  activeGame: GameMode;
   activeView: AppView;
   settings: LibrarySettings | null;
   tracks: TrackSummary[];
   favoriteCount: number;
   recentCount: number;
+  sourceCount: number;
   searchQuery: string;
   children: ReactNode;
+  onGameChange: (game: GameMode) => void;
   onViewChange: (view: AppView) => void;
   onSearchChange: (query: string) => void;
   onOpenFolderManager: () => void;
@@ -32,13 +36,16 @@ const navItems: Array<{ id: AppView; label: string; icon: typeof Library; count:
 ];
 
 export function AppShell({
+  activeGame,
   activeView,
   settings,
   tracks,
   favoriteCount,
   recentCount,
+  sourceCount,
   searchQuery,
   children,
+  onGameChange,
   onViewChange,
   onSearchChange,
   onOpenFolderManager,
@@ -63,12 +70,30 @@ export function AppShell({
       <aside className="sidebar">
         <div className="brand-card">
           <span className="brand-mark" aria-hidden="true">
-            <ListMusic />
+            {activeGame === "rhythmDoctor" ? <Activity /> : <ListMusic />}
           </span>
           <span>
-            <strong>ADOFAI</strong>
+            <strong>{activeGame === "rhythmDoctor" ? "Rhythm Doctor" : "ADOFAI"}</strong>
             <small>Music Box</small>
           </span>
+          <div className="game-switch" role="group" aria-label="切换曲库">
+            <button
+              className={activeGame === "adofai" ? "active" : ""}
+              type="button"
+              onClick={() => onGameChange("adofai")}
+              title="ADOFAI"
+            >
+              A
+            </button>
+            <button
+              className={activeGame === "rhythmDoctor" ? "active" : ""}
+              type="button"
+              onClick={() => onGameChange("rhythmDoctor")}
+              title="Rhythm Doctor"
+            >
+              RD
+            </button>
+          </div>
         </div>
 
         <nav className="main-nav" aria-label="主导航">
@@ -98,7 +123,7 @@ export function AppShell({
         <section className="sidebar-section">
           <button className="source-manage" type="button" onClick={onOpenFolderManager}>
             <span>管理来源</span>
-            <strong>{(settings?.folders.length ?? 0) + (settings?.adofaiFiles?.length ?? 0)}</strong>
+            <strong>{settings ? sourceCount : 0}</strong>
           </button>
         </section>
       </aside>

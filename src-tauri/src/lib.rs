@@ -1,4 +1,6 @@
 mod adofai;
+mod library;
+mod rhythm_doctor;
 
 use adofai::commands::{
     add_library_file, add_library_folder, build_audio_timeline, get_settings, get_track_detail,

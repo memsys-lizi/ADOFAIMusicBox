@@ -17,7 +17,7 @@
 
 .brand-card {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 40px;
@@ -58,6 +58,35 @@
 .brand-card small {
   color: var(--muted);
   font-size: 12px;
+}
+
+.game-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 34px);
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #e5e5e5;
+}
+
+.game-switch button {
+  display: grid;
+  width: 34px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  color: #5f6469;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background: transparent;
+}
+
+.game-switch button.active {
+  color: #0a0d10;
+  background: #ffffff;
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.08);
 }
 
 .main-nav {

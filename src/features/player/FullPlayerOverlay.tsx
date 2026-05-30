@@ -109,7 +109,7 @@ export function FullPlayerOverlay({
     { label: "长按音", value: `${formatCount(timeline?.holdSoundEvents.length ?? 0)} 个` },
     { label: "音乐文件", value: formatFileSize(track?.audioFileSize) },
     { label: "视频", value: track?.hasVideo ? "有" : "无" },
-    { label: "谱面文件", value: fileName(track?.adofaiPath) },
+    { label: "谱面文件", value: fileName(track?.chartPath) },
     { label: "音频文件", value: fileName(track?.audioPath) },
     { label: "封面", value: fileName(track?.coverPath) },
     { label: "图标", value: fileName(track?.iconPath) },
@@ -298,7 +298,7 @@ export function FullPlayerOverlay({
             <header>
               <div>
                 <strong>{track?.title ?? "谱面信息"}</strong>
-                <span>{track?.artist ?? "ADOFAI Music Box"}</span>
+                <span>{track?.artist ?? "Music Box"}</span>
               </div>
               <button type="button" onClick={() => setVideoInfoOpen(false)} title="收起谱面信息">
                 <PanelRightClose aria-hidden="true" />
@@ -393,7 +393,7 @@ function TrackInfoPanel({ track, infoItems, compact = false }: TrackInfoPanelPro
       {!compact && (
         <div className="info-title">
           <h1>{track?.title ?? "还没有播放音乐"}</h1>
-          <span>{track?.artist ?? "ADOFAI Music Box"}</span>
+          <span>{track?.artist ?? "Music Box"}</span>
         </div>
       )}
       <div className="info-stream">

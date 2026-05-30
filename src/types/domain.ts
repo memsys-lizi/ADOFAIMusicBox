@@ -3,6 +3,7 @@ export type DefaultCoverMode = "generated" | "minimal";
 export type ParseStatus = "ok" | "lenient" | "warning" | "error";
 export type AppView = "local" | "favorites" | "recent";
 export type PlaybackMode = "sequence" | "repeatAll" | "repeatOne" | "shuffle";
+export type GameMode = "adofai" | "rhythmDoctor";
 
 export interface PlayerOpenSourceRect {
   left: number;
@@ -16,12 +17,29 @@ export interface HiddenTrack {
   title: string;
   artist: string;
   author: string;
+  game: GameMode;
+  chartPath: string;
   adofaiPath: string;
   folderPath: string;
   removedAt: string;
 }
 
+export interface LibraryProfile {
+  folders: string[];
+  files: string[];
+  favoriteTrackIds: string[];
+  recentTrackIds: string[];
+  hiddenTrackIds: string[];
+  hiddenTracks: HiddenTrack[];
+}
+
+export interface LibraryProfiles {
+  adofai: LibraryProfile;
+  rhythmDoctor: LibraryProfile;
+}
+
 export interface LibrarySettings {
+  libraries: LibraryProfiles;
   folders: string[];
   adofaiFiles: string[];
   theme: ThemeMode;
@@ -40,6 +58,8 @@ export interface LibrarySettings {
 
 export interface TrackSummary {
   id: string;
+  game: GameMode;
+  chartPath: string;
   adofaiPath: string;
   folderPath: string;
   title: string;

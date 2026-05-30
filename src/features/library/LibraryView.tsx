@@ -17,9 +17,10 @@ import {
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { EmptyArtwork } from "../../components/EmptyArtwork";
 import { formatDuration, formatFileSize } from "../../lib/format";
-import type { AppView, TrackSummary } from "../../types/domain";
+import type { AppView, GameMode, TrackSummary } from "../../types/domain";
 
 interface LibraryViewProps {
+  game: GameMode;
   activeView: AppView;
   tracks: TrackSummary[];
   allTrackCount: number;
@@ -56,6 +57,7 @@ const sortOptions: Array<{ value: SortMode; label: string }> = [
 ];
 
 export function LibraryView({
+  game,
   activeView,
   tracks,
   allTrackCount,
@@ -323,7 +325,7 @@ export function LibraryView({
             {activeView === "local" ? <Plus aria-hidden="true" /> : <Heart aria-hidden="true" />}
           </div>
           <h2>{emptyTitle(activeView, query)}</h2>
-          <p>{emptyDescription(activeView, query)}</p>
+          <p>{emptyDescription(activeView, query, game)}</p>
           {activeView === "local" && (
             <button className="pill-button main" type="button" onClick={onAddFolder}>
               <Plus aria-hidden="true" />
@@ -562,7 +564,7 @@ function emptyTitle(view: AppView, query: string) {
   return "添加文件夹开始播放";
 }
 
-function emptyDescription(view: AppView, query: string) {
+function emptyDescription(view: AppView, query: string, game: GameMode) {
   if (query.trim()) {
     return "换一个关键词试试。";
   }
@@ -572,5 +574,7 @@ function emptyDescription(view: AppView, query: string) {
   if (view === "recent") {
     return "播放过的音乐会自动出现在这里。";
   }
-  return "选择包含 .adofai 谱面的文件夹，软件会自动扫描音乐和封面。";
+  return game === "rhythmDoctor"
+    ? "选择包含 .rdlevel 谱面的文件夹，软件会自动扫描音乐和封面。"
+    : "选择包含 .adofai 谱面的文件夹，软件会自动扫描音乐和封面。";
 }

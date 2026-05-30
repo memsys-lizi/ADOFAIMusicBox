@@ -8,7 +8,7 @@ import "./styles/shell.css";
 import "./styles/library.css";
 import "./styles/player.css";
 import "./styles/modal.css";
-import { useAdoAudio } from "./audio/useAdoAudio";
+import { useChartAudio } from "./audio/useChartAudio";
 import { AppShell } from "./components/AppShell";
 import { FolderManager } from "./components/FolderManager";
 import { LibraryView } from "./features/library/LibraryView";
@@ -30,7 +30,9 @@ import {
 import type {
   AppView,
   AudioTimeline,
+  GameMode,
   HiddenTrack,
+  LibraryProfile,
   LibrarySettings,
   PlayerOpenSourceRect,
   PlaybackMode,
@@ -39,6 +41,7 @@ import type {
 
 function App() {
   const [activeView, setActiveView] = useState<AppView>("local");
+  const [activeGame, setActiveGame] = useState<GameMode>("adofai");
   const [settings, setSettings] = useState<LibrarySettings | null>(null);
   const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackSummary | null>(null);
@@ -54,19 +57,21 @@ function App() {
   const [playbackView, setPlaybackView] = useState<AppView>("local");
   const [locateRequest, setLocateRequest] = useState(0);
 
-  const audio = useAdoAudio({
+  const audio = useChartAudio({
     musicVolume: settings?.musicVolume ?? 1,
     hitSoundVolume: settings?.hitSoundVolume ?? 0.82,
     playSoundVolume: settings?.playSoundVolume ?? 0.78,
     onEnded: handlePlaybackEnded,
   });
 
-  const favoriteIds = useMemo(
-    () => new Set(settings?.favoriteTrackIds ?? []),
-    [settings?.favoriteTrackIds],
+  const profile = useMemo(
+    () => (settings ? activeProfile(settings, activeGame) : emptyProfile()),
+    [activeGame, settings],
   );
 
-  const recentIds = settings?.recentTrackIds ?? [];
+  const favoriteIds = useMemo(() => new Set(profile.favoriteTrackIds), [profile.favoriteTrackIds]);
+
+  const recentIds = profile.recentTrackIds;
 
   const favoriteTrackCount = useMemo(
     () => tracks.filter((track) => favoriteIds.has(track.id)).length,
@@ -106,15 +111,26 @@ function App() {
     void bootstrap();
   }, []);
 
+  useEffect(() => {
+    if (!settings) {
+      return;
+    }
+    audio.pause();
+    setTimeline(null);
+    setLoadedTrackId(null);
+    setSelectedTrack(null);
+    void loadModeTracks(activeGame);
+  }, [activeGame]);
+
   async function bootstrap() {
     try {
       const nextSettings = normalizeSettings(await getSettings());
       setSettings(nextSettings);
-      const cachedTracks = normalizeTracks(await listTracks());
+      const cachedTracks = normalizeTracks(await listTracks(activeGame));
       setTracks(cachedTracks);
       if (cachedTracks.length > 0) {
         setSelectedTrack(cachedTracks[0]);
-      } else if (nextSettings.folders.length > 0 || nextSettings.adofaiFiles.length > 0) {
+      } else if (hasSources(activeProfile(nextSettings, activeGame))) {
         window.setTimeout(() => void refreshLibrary(), 80);
       }
     } catch (err) {
@@ -122,11 +138,24 @@ function App() {
     }
   }
 
-  async function refreshLibrary() {
+  async function loadModeTracks(mode: GameMode) {
+    try {
+      const cachedTracks = normalizeTracks(await listTracks(mode));
+      setTracks(cachedTracks);
+      setSelectedTrack(cachedTracks[0] ?? null);
+      if (cachedTracks.length === 0 && settings && hasSources(activeProfile(settings, mode))) {
+        window.setTimeout(() => void refreshLibrary(mode), 80);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function refreshLibrary(mode: GameMode = activeGame) {
     setIsScanning(true);
     setError(null);
     try {
-      const nextTracks = normalizeTracks(await scanLibrary());
+      const nextTracks = normalizeTracks(await scanLibrary(mode));
       setTracks(nextTracks);
       if (!selectedTrack && nextTracks.length > 0) {
         setSelectedTrack(nextTracks[0]);
@@ -161,7 +190,7 @@ function App() {
       const result = await open({
         directory: false,
         multiple: false,
-        filters: [{ name: "ADOFAI 谱面", extensions: ["adofai"] }],
+        filters: [chartFileFilter(activeGame)],
       });
       if (typeof result === "string") {
         await handleAddFile(result);
@@ -173,7 +202,7 @@ function App() {
 
   async function handleAddFolder(folder: string) {
     try {
-      const next = normalizeSettings(await addLibraryFolder(folder));
+      const next = normalizeSettings(await addLibraryFolder(activeGame, folder));
       setSettings(next);
       await refreshLibrary();
     } catch (err) {
@@ -183,19 +212,22 @@ function App() {
 
   async function handleAddFile(file: string) {
     try {
-      const next = normalizeSettings(await addLibraryFile(file));
-      const summary = normalizeTrack(await getTrackSummary(file));
+      const next = normalizeSettings(await addLibraryFile(activeGame, file));
+      const summary = normalizeTrack(await getTrackSummary(activeGame, file));
       const restored = normalizeSettings({
         ...next,
-        hiddenTrackIds: next.hiddenTrackIds.filter((id) => id !== summary.id),
-        hiddenTracks: next.hiddenTracks.filter(
-          (track) => track.id !== summary.id && !samePath(track.adofaiPath, summary.adofaiPath),
-        ),
+        libraries: updateProfile(next.libraries, activeGame, {
+          ...activeProfile(next, activeGame),
+          hiddenTrackIds: activeProfile(next, activeGame).hiddenTrackIds.filter((id) => id !== summary.id),
+          hiddenTracks: activeProfile(next, activeGame).hiddenTracks.filter(
+            (track) => track.id !== summary.id && !samePath(track.chartPath, summary.chartPath),
+          ),
+        }),
       });
       await persistSettings(restored);
       const nextTracks = sortTracksByTitle([
         ...tracks.filter(
-          (track) => track.id !== summary.id && !samePath(track.adofaiPath, summary.adofaiPath),
+          (track) => track.id !== summary.id && !samePath(track.chartPath, summary.chartPath),
         ),
         summary,
       ]);
@@ -213,14 +245,19 @@ function App() {
     if (!settings) {
       return;
     }
+    const currentProfile = activeProfile(settings, activeGame);
+    const nextProfile = {
+      ...currentProfile,
+      folders: currentProfile.folders.filter((item) => item !== folder),
+    };
     const next = normalizeSettings({
       ...settings,
-      folders: settings.folders.filter((item) => item !== folder),
+      libraries: updateProfile(settings.libraries, activeGame, nextProfile),
     });
     removeVisibleTracks(
       (track) =>
-        pathIsInside(track.adofaiPath, folder) &&
-        !next.adofaiFiles.some((file) => samePath(file, track.adofaiPath)),
+        pathIsInside(track.chartPath, folder) &&
+        !activeProfile(next, activeGame).files.some((file) => samePath(file, track.chartPath)),
     );
     await persistSettings(next);
   }
@@ -229,38 +266,43 @@ function App() {
     if (!settings) {
       return;
     }
-    const sourceTrack = tracks.find((track) => samePath(track.adofaiPath, file));
-    const shouldHide = settings.folders.some((folder) => pathIsInside(file, folder));
+    const currentProfile = activeProfile(settings, activeGame);
+    const sourceTrack = tracks.find((track) => samePath(track.chartPath, file));
+    const shouldHide = currentProfile.folders.some((folder) => pathIsInside(file, folder));
     const hidden = shouldHide
       ? sourceTrack
-        ? addHiddenTrack(settings, sourceTrack)
-        : addHiddenTrackRecord(settings, hiddenTrackFromPath(file))
+        ? addHiddenTrack(currentProfile, sourceTrack)
+        : addHiddenTrackRecord(currentProfile, hiddenTrackFromPath(file, activeGame))
       : {
-          hiddenTrackIds: settings.hiddenTrackIds,
-          hiddenTracks: settings.hiddenTracks,
+          hiddenTrackIds: currentProfile.hiddenTrackIds,
+          hiddenTracks: currentProfile.hiddenTracks,
         };
-    const next = normalizeSettings({
-      ...settings,
-      adofaiFiles: settings.adofaiFiles.filter((item) => item !== file),
+    const nextProfile = {
+      ...currentProfile,
+      files: currentProfile.files.filter((item) => item !== file),
       favoriteTrackIds: sourceTrack
-        ? settings.favoriteTrackIds.filter((id) => id !== sourceTrack.id)
-        : settings.favoriteTrackIds,
+        ? currentProfile.favoriteTrackIds.filter((id) => id !== sourceTrack.id)
+        : currentProfile.favoriteTrackIds,
       recentTrackIds: sourceTrack
-        ? settings.recentTrackIds.filter((id) => id !== sourceTrack.id)
-        : settings.recentTrackIds,
+        ? currentProfile.recentTrackIds.filter((id) => id !== sourceTrack.id)
+        : currentProfile.recentTrackIds,
       hiddenTrackIds: hidden.hiddenTrackIds,
       hiddenTracks: hidden.hiddenTracks,
+    };
+    const next = normalizeSettings({
+      ...settings,
+      libraries: updateProfile(settings.libraries, activeGame, nextProfile),
     });
-    removeVisibleTracks((track) => samePath(track.adofaiPath, file));
+    removeVisibleTracks((track) => samePath(track.chartPath, file));
     await persistSettings(next);
   }
 
   async function handleOpenTrackFolder(track: TrackSummary) {
-    await revealLocalPath(track.audioPath ?? track.adofaiPath);
+    await revealLocalPath(track.audioPath?.startsWith("rd:") ? track.chartPath : track.audioPath ?? track.chartPath);
   }
 
   async function handleShowTrackFile(track: TrackSummary) {
-    if (!track.adofaiPath) {
+    if (!track.chartPath) {
       return;
     }
     if (!hasTauriBridge()) {
@@ -268,7 +310,7 @@ function App() {
       return;
     }
     try {
-      await revealItemInDir(track.adofaiPath);
+      await revealItemInDir(track.chartPath);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -294,23 +336,28 @@ function App() {
       return;
     }
 
-    const isSingleFileSource = settings.adofaiFiles.some((file) => samePath(file, track.adofaiPath));
-    const isFolderSource = settings.folders.some((folder) => pathIsInside(track.adofaiPath, folder));
+    const currentProfile = activeProfile(settings, activeGame);
+    const isSingleFileSource = currentProfile.files.some((file) => samePath(file, track.chartPath));
+    const isFolderSource = currentProfile.folders.some((folder) => pathIsInside(track.chartPath, folder));
     const hidden = isFolderSource
-      ? addHiddenTrack(settings, track)
+      ? addHiddenTrack(currentProfile, track)
       : {
-          hiddenTrackIds: settings.hiddenTrackIds,
-          hiddenTracks: settings.hiddenTracks,
+          hiddenTrackIds: currentProfile.hiddenTrackIds,
+          hiddenTracks: currentProfile.hiddenTracks,
         };
-    const next = normalizeSettings({
-      ...settings,
-      adofaiFiles: isSingleFileSource
-        ? settings.adofaiFiles.filter((file) => !samePath(file, track.adofaiPath))
-        : settings.adofaiFiles,
-      favoriteTrackIds: settings.favoriteTrackIds.filter((id) => id !== track.id),
-      recentTrackIds: settings.recentTrackIds.filter((id) => id !== track.id),
+    const nextProfile = {
+      ...currentProfile,
+      files: isSingleFileSource
+        ? currentProfile.files.filter((file) => !samePath(file, track.chartPath))
+        : currentProfile.files,
+      favoriteTrackIds: currentProfile.favoriteTrackIds.filter((id) => id !== track.id),
+      recentTrackIds: currentProfile.recentTrackIds.filter((id) => id !== track.id),
       hiddenTrackIds: hidden.hiddenTrackIds,
       hiddenTracks: hidden.hiddenTracks,
+    };
+    const next = normalizeSettings({
+      ...settings,
+      libraries: updateProfile(settings.libraries, activeGame, nextProfile),
     });
 
     const visibleTracks = tracks.filter((item) => item.id !== track.id);
@@ -330,12 +377,17 @@ function App() {
     if (!settings) {
       return;
     }
+    const currentProfile = activeProfile(settings, activeGame);
+    const nextProfile = {
+      ...currentProfile,
+      hiddenTrackIds: currentProfile.hiddenTrackIds.filter((id) => id !== track.id),
+      hiddenTracks: currentProfile.hiddenTracks.filter(
+        (item) => item.id !== track.id && !(track.chartPath && samePath(item.chartPath, track.chartPath)),
+      ),
+    };
     const next = normalizeSettings({
       ...settings,
-      hiddenTrackIds: settings.hiddenTrackIds.filter((id) => id !== track.id),
-      hiddenTracks: settings.hiddenTracks.filter(
-        (item) => item.id !== track.id && !(track.adofaiPath && samePath(item.adofaiPath, track.adofaiPath)),
-      ),
+      libraries: updateProfile(settings.libraries, activeGame, nextProfile),
     });
     await persistSettings(next);
     await refreshLibrary();
@@ -361,6 +413,19 @@ function App() {
     void saveSettings(next).catch((err: unknown) => setError(errorMessage(err)));
   }
 
+  function patchActiveProfile(patch: Partial<LibraryProfile>) {
+    if (!settings) {
+      return;
+    }
+    const nextProfile = { ...profile, ...patch };
+    const next = normalizeSettings({
+      ...settings,
+      libraries: updateProfile(settings.libraries, activeGame, nextProfile),
+    });
+    setSettings(next);
+    void saveSettings(next).catch((err: unknown) => setError(errorMessage(err)));
+  }
+
   function removeVisibleTracks(shouldRemove: (track: TrackSummary) => boolean) {
     const nextTracks = tracks.filter((track) => !shouldRemove(track));
     setTracks(nextTracks);
@@ -374,20 +439,20 @@ function App() {
   }
 
   function persistTrackCache(nextTracks: TrackSummary[]) {
-    void saveTrackCache(nextTracks).catch((err: unknown) => setError(errorMessage(err)));
+    void saveTrackCache(activeGame, nextTracks).catch((err: unknown) => setError(errorMessage(err)));
   }
 
-  function addHiddenTrack(settings: LibrarySettings, track: TrackSummary) {
-    return addHiddenTrackRecord(settings, hiddenTrackFromSummary(track));
+  function addHiddenTrack(profile: LibraryProfile, track: TrackSummary) {
+    return addHiddenTrackRecord(profile, hiddenTrackFromSummary(track));
   }
 
-  function addHiddenTrackRecord(settings: LibrarySettings, hiddenTrack: HiddenTrack) {
+  function addHiddenTrackRecord(profile: LibraryProfile, hiddenTrack: HiddenTrack) {
     return {
-      hiddenTrackIds: Array.from(new Set([...settings.hiddenTrackIds, hiddenTrack.id])),
+      hiddenTrackIds: Array.from(new Set([...profile.hiddenTrackIds, hiddenTrack.id])),
       hiddenTracks: [
         hiddenTrack,
-        ...settings.hiddenTracks.filter(
-          (item) => item.id !== hiddenTrack.id && !samePath(item.adofaiPath, hiddenTrack.adofaiPath),
+        ...profile.hiddenTracks.filter(
+          (item) => item.id !== hiddenTrack.id && !samePath(item.chartPath, hiddenTrack.chartPath),
         ),
       ],
     };
@@ -397,21 +462,21 @@ function App() {
     if (!settings) {
       return;
     }
-    const recentTrackIds = [trackId, ...settings.recentTrackIds.filter((id) => id !== trackId)].slice(0, 500);
-    patchSettings({ recentTrackIds });
+    const recentTrackIds = [trackId, ...profile.recentTrackIds.filter((id) => id !== trackId)].slice(0, 500);
+    patchActiveProfile({ recentTrackIds });
   }
 
   function handleToggleFavorite(track: TrackSummary | null = selectedTrack) {
     if (!track || !settings) {
       return;
     }
-    const nextIds = new Set(settings.favoriteTrackIds);
+    const nextIds = new Set(profile.favoriteTrackIds);
     if (nextIds.has(track.id)) {
       nextIds.delete(track.id);
     } else {
       nextIds.add(track.id);
     }
-    patchSettings({ favoriteTrackIds: [...nextIds] });
+    patchActiveProfile({ favoriteTrackIds: [...nextIds] });
   }
 
   async function handlePlayTrack(track: TrackSummary, sourceView: AppView = activeView) {
@@ -428,7 +493,7 @@ function App() {
   }
 
   async function loadTrack(track: TrackSummary) {
-    const nextTimeline = await buildAudioTimeline(track.adofaiPath);
+    const nextTimeline = await buildAudioTimeline(track.game, track.chartPath);
     await audio.load(track, nextTimeline);
     setTimeline(nextTimeline);
     setLoadedTrackId(track.id);
@@ -554,12 +619,15 @@ function App() {
   return (
     <>
       <AppShell
+        activeGame={activeGame}
         activeView={activeView}
         settings={settings}
         tracks={tracks}
         favoriteCount={favoriteTrackCount}
         recentCount={recentTrackCount}
         searchQuery={searchQuery}
+        sourceCount={profile.folders.length + profile.files.length}
+        onGameChange={setActiveGame}
         onViewChange={setActiveView}
         onSearchChange={setSearchQuery}
         onOpenFolderManager={() => setFolderManagerOpen(true)}
@@ -571,6 +639,7 @@ function App() {
           </div>
         )}
         <LibraryView
+          game={activeGame}
           activeView={activeView}
           tracks={viewTracks}
           allTrackCount={tracks.length}
@@ -645,9 +714,10 @@ function App() {
 
       <FolderManager
         open={folderManagerOpen}
-        folders={settings?.folders ?? []}
-        files={settings?.adofaiFiles ?? []}
-        hiddenTracks={settings?.hiddenTracks ?? []}
+        game={activeGame}
+        folders={profile.folders}
+        files={profile.files}
+        hiddenTracks={profile.hiddenTracks}
         isScanning={isScanning}
         onClose={() => setFolderManagerOpen(false)}
         onAddFolder={() => void chooseAndAddFolder()}
@@ -670,19 +740,80 @@ function errorMessage(err: unknown) {
 }
 
 function normalizeSettings(settings: LibrarySettings): LibrarySettings {
+  const adofaiProfile = normalizeProfile(settings.libraries?.adofai ?? {
+    ...emptyProfile(),
+    folders: settings.folders ?? [],
+    files: settings.adofaiFiles ?? [],
+    favoriteTrackIds: settings.favoriteTrackIds ?? [],
+    recentTrackIds: settings.recentTrackIds ?? [],
+    hiddenTrackIds: settings.hiddenTrackIds ?? [],
+    hiddenTracks: settings.hiddenTracks ?? [],
+  }, "adofai");
+  const rhythmDoctorProfile = normalizeProfile(settings.libraries?.rhythmDoctor, "rhythmDoctor");
   return {
     ...settings,
-    adofaiFiles: Array.isArray(settings.adofaiFiles) ? settings.adofaiFiles : [],
+    libraries: {
+      adofai: adofaiProfile,
+      rhythmDoctor: rhythmDoctorProfile,
+    },
+    folders: adofaiProfile.folders,
+    adofaiFiles: adofaiProfile.files,
     theme: "light",
     musicVolume: settings.musicVolume ?? 1,
     hitSoundVolume: settings.hitSoundVolume ?? 0.82,
     playSoundVolume: settings.playSoundVolume ?? 0.78,
     playbackMode: settings.playbackMode ?? "sequence",
-    favoriteTrackIds: Array.isArray(settings.favoriteTrackIds) ? settings.favoriteTrackIds : [],
-    recentTrackIds: Array.isArray(settings.recentTrackIds) ? settings.recentTrackIds : [],
-    hiddenTrackIds: Array.isArray(settings.hiddenTrackIds) ? settings.hiddenTrackIds : [],
-    hiddenTracks: normalizeHiddenTracks(settings.hiddenTracks, settings.hiddenTrackIds),
+    favoriteTrackIds: adofaiProfile.favoriteTrackIds,
+    recentTrackIds: adofaiProfile.recentTrackIds,
+    hiddenTrackIds: adofaiProfile.hiddenTrackIds,
+    hiddenTracks: adofaiProfile.hiddenTracks,
   };
+}
+
+function emptyProfile(): LibraryProfile {
+  return {
+    folders: [],
+    files: [],
+    favoriteTrackIds: [],
+    recentTrackIds: [],
+    hiddenTrackIds: [],
+    hiddenTracks: [],
+  };
+}
+
+function normalizeProfile(profile: LibraryProfile | undefined, game: GameMode): LibraryProfile {
+  return {
+    folders: Array.isArray(profile?.folders) ? profile.folders : [],
+    files: Array.isArray(profile?.files) ? profile.files : [],
+    favoriteTrackIds: Array.isArray(profile?.favoriteTrackIds) ? profile.favoriteTrackIds : [],
+    recentTrackIds: Array.isArray(profile?.recentTrackIds) ? profile.recentTrackIds : [],
+    hiddenTrackIds: Array.isArray(profile?.hiddenTrackIds) ? profile.hiddenTrackIds : [],
+    hiddenTracks: normalizeHiddenTracks(profile?.hiddenTracks, profile?.hiddenTrackIds, game),
+  };
+}
+
+function activeProfile(settings: LibrarySettings, game: GameMode): LibraryProfile {
+  return game === "rhythmDoctor" ? settings.libraries.rhythmDoctor : settings.libraries.adofai;
+}
+
+function updateProfile(
+  libraries: LibrarySettings["libraries"],
+  game: GameMode,
+  profile: LibraryProfile,
+): LibrarySettings["libraries"] {
+  return game === "rhythmDoctor"
+    ? { ...libraries, rhythmDoctor: profile }
+    : { ...libraries, adofai: profile };
+}
+
+function hasSources(profile: LibraryProfile) {
+  return profile.folders.length > 0 || profile.files.length > 0;
+}
+
+function chartFileFilter(game: GameMode) {
+  return game === "rhythmDoctor"
+    ? { name: "Rhythm Doctor 谱面", extensions: ["rdlevel"] }
+    : { name: "ADOFAI 谱面", extensions: ["adofai"] };
 }
 
 function normalizeTracks(tracks: TrackSummary[]) {
@@ -696,8 +827,12 @@ function sortTracksByTitle(tracks: TrackSummary[]) {
 }
 
 function normalizeTrack(track: TrackSummary): TrackSummary {
+  const chartPath = track.chartPath || track.adofaiPath;
   return {
     ...track,
+    game: track.game ?? "adofai",
+    chartPath,
+    adofaiPath: track.adofaiPath || chartPath,
     title: cleanDisplayText(track.title),
     artist: cleanDisplayText(track.artist),
     author: cleanDisplayText(track.author),
@@ -761,18 +896,22 @@ function hiddenTrackFromSummary(track: TrackSummary): HiddenTrack {
     title: track.title,
     artist: track.artist,
     author: track.author,
+    game: track.game,
+    chartPath: track.chartPath,
     adofaiPath: track.adofaiPath,
     folderPath: track.folderPath,
     removedAt: new Date().toISOString(),
   };
 }
 
-function hiddenTrackFromPath(path: string): HiddenTrack {
+function hiddenTrackFromPath(path: string, game: GameMode): HiddenTrack {
   return {
     id: `path:${normalizePathKey(path)}`,
     title: fileStem(path),
     artist: "未知艺术家",
     author: "未知谱师",
+    game,
+    chartPath: path,
     adofaiPath: path,
     folderPath: parentPath(path),
     removedAt: new Date().toISOString(),
@@ -782,6 +921,7 @@ function hiddenTrackFromPath(path: string): HiddenTrack {
 function normalizeHiddenTracks(
   hiddenTracks: LibrarySettings["hiddenTracks"] | undefined,
   hiddenTrackIds: string[] | undefined,
+  game: GameMode,
 ): HiddenTrack[] {
   if (Array.isArray(hiddenTracks)) {
     return hiddenTracks.map((track) => ({
@@ -789,7 +929,9 @@ function normalizeHiddenTracks(
       title: cleanDisplayText(track.title || "已移除曲目"),
       artist: cleanDisplayText(track.artist || "未知艺术家"),
       author: cleanDisplayText(track.author || "未知谱师"),
-      adofaiPath: track.adofaiPath ?? "",
+      game: track.game ?? game,
+      chartPath: track.chartPath || track.adofaiPath || "",
+      adofaiPath: track.adofaiPath || track.chartPath || "",
       folderPath: track.folderPath ?? "",
       removedAt: track.removedAt ?? "",
     }));
@@ -800,6 +942,8 @@ function normalizeHiddenTracks(
         title: "已移除曲目",
         artist: "未知艺术家",
         author: "未知谱师",
+        game,
+        chartPath: "",
         adofaiPath: "",
         folderPath: "",
         removedAt: "",
