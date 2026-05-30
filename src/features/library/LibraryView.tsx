@@ -460,7 +460,12 @@ function TrackRow({
       }}
     >
       <div className="song-cell">
-        <EmptyArtwork title={track.title} imagePath={track.iconPath ?? track.coverPath} size="sm" />
+        <EmptyArtwork
+          title={track.title}
+          imagePath={track.iconPath ?? track.coverPath}
+          game={track.game}
+          size="sm"
+        />
         <div>
           <strong>{track.title}</strong>
           <span>{track.artist}</span>
@@ -503,7 +508,7 @@ function TrackCard({
       onContextMenu={(event) => onContextMenu(event, track)}
     >
       <button className="cover-play" type="button" onClick={() => onPlayTrack(track)}>
-        <EmptyArtwork title={track.title} imagePath={track.coverPath} size="md" />
+        <EmptyArtwork title={track.title} imagePath={track.coverPath} game={track.game} size="md" />
         <span>
           <Play aria-hidden="true" />
         </span>

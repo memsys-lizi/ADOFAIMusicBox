@@ -25,9 +25,9 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import defaultCover from "../../assets/header.jpg";
 import turntablePlayer from "../../assets/turntable-player.png";
 import { toAssetUrl } from "../../lib/assets";
+import { defaultArtworkSource } from "../../lib/defaultArtwork";
 import { formatCount, formatDuration, formatFileSize } from "../../lib/format";
 import { runWindowAction, startWindowDrag } from "../../lib/window";
 import { useCoverPalette } from "../../hooks/useCoverPalette";
@@ -87,8 +87,9 @@ export function FullPlayerOverlay({
   const [entryStyle, setEntryStyle] = useState<CSSProperties | undefined>();
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [videoInfoOpen, setVideoInfoOpen] = useState(false);
-  const palette = useCoverPalette(track?.coverPath);
-  const cover = toAssetUrl(track?.coverPath) ?? defaultCover;
+  const fallbackCover = defaultArtworkSource(track?.game, "cover");
+  const palette = useCoverPalette(track?.coverPath ?? fallbackCover);
+  const cover = toAssetUrl(track?.coverPath) ?? fallbackCover;
   const videoSource = toAssetUrl(track?.videoPath);
   const hasVideo = Boolean(track?.hasVideo && videoSource);
   const videoActive = Boolean(hasVideo && videoEnabled);

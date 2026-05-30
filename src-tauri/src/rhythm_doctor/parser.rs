@@ -263,6 +263,42 @@ pub fn resolve_sibling(base_file: &Path, filename: Option<&str>) -> Option<PathB
     Some(base_file.parent()?.join(path))
 }
 
+pub fn resolve_sibling_audio(base_file: &Path, filename: &str) -> Option<PathBuf> {
+    let filename = filename.trim();
+    if filename.is_empty() {
+        return None;
+    }
+    if let Some(path) = resolve_sibling(base_file, Some(filename)).filter(|path| path.exists()) {
+        return Some(path);
+    }
+    if has_audio_extension(filename) {
+        return None;
+    }
+
+    let requested = Path::new(filename);
+    let (parent, stem) = if requested.is_absolute() {
+        (
+            requested.parent()?.to_path_buf(),
+            requested.file_name()?.to_string_lossy().to_string(),
+        )
+    } else {
+        let base = base_file.parent()?;
+        let relative_parent = requested.parent().unwrap_or_else(|| Path::new(""));
+        (
+            base.join(relative_parent),
+            requested.file_name()?.to_string_lossy().to_string(),
+        )
+    };
+
+    for ext in SUPPORTED_AUDIO_EXTENSIONS {
+        let candidate = parent.join(format!("{stem}.{ext}"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 pub fn clean_display_text(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut in_tag = false;
@@ -290,10 +326,7 @@ pub fn has_audio_extension(filename: &str) -> bool {
     Path::new(filename)
         .extension()
         .and_then(|value| value.to_str())
-        .is_some_and(|ext| {
-            matches!(
-                ext.to_ascii_lowercase().as_str(),
-                "ogg" | "mp3" | "wav" | "aif" | "aiff" | "flac"
-            )
-        })
+        .is_some_and(|ext| SUPPORTED_AUDIO_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
+
+const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &["ogg", "mp3", "wav", "aif", "aiff", "flac"];

@@ -81,7 +81,13 @@ export function MiniPlayer({
           onClick={handleOpenPlayer}
           title="打开播放页"
         >
-          <EmptyArtwork title={track?.title ?? "默认封面"} imagePath={track?.coverPath} size="sm" fallback="cover" />
+          <EmptyArtwork
+            title={track?.title ?? "默认封面"}
+            imagePath={track?.coverPath}
+            game={track?.game}
+            size="sm"
+            fallback="cover"
+          />
         </button>
         <button className="mini-title" type="button" onClick={handleOpenPlayer}>
           <strong>{track?.title ?? "还没有播放音乐"}</strong>
