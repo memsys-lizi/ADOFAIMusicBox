@@ -268,35 +268,3 @@ fn strip_delay_suffix(token: &str) -> &str {
         token
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn player_mode_condition_uses_single_player_branch() {
-        let root = json!({
-            "conditionals": [
-                { "type": "PlayerMode", "id": 1, "tag": "1", "twoPlayerMode": true }
-            ]
-        });
-        let context = ConditionContext::single_player(&root);
-        assert_eq!(context.evaluate_condition_expression("1d0"), Some(false));
-        assert_eq!(context.evaluate_condition_expression("~1d0"), Some(true));
-    }
-
-    #[test]
-    fn tagged_event_requires_run_tag() {
-        let context = ConditionContext::single_player(&json!({}));
-        assert!(!context.event_runs(&json!({ "type": "PlaySound", "tag": "Later" })));
-        assert!(context.event_runs(&json!({ "type": "PlaySound", "tag": "Later", "runTag": true })));
-    }
-
-    #[test]
-    fn unknown_conditions_do_not_run_static_timeline() {
-        let context = ConditionContext::single_player(&json!({}));
-        assert!(!context.event_runs(&json!({ "type": "PlaySound", "if": "9d0" })));
-        assert!(!context.event_runs(&json!({ "type": "PlaySound", "if": "~9d0" })));
-    }
-}

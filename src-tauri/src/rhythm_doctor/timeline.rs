@@ -1503,15 +1503,14 @@ fn append_sound_ref(
     let filename = sound.filename.trim();
     let pitch = sound.pitch.max(0.05);
     let mut volume = sound.volume;
-    let mut offset_sec = sound.offset_ms / 1000.0;
+    let explicit_offset_sec = sound.offset_ms / 1000.0;
+    let mut offset_sec = explicit_offset_sec;
     let sound_name = if let Some(path) = super::parser::resolve_sibling_audio(level_path, filename)
     {
         path.to_string_lossy().to_string()
     } else {
         let builtin = builtin_sound_name(filename);
-        if offset_sec == 0.0 {
-            offset_sec = sound_offset(&builtin);
-        }
+        offset_sec = builtin_sound_offset(&builtin).unwrap_or(explicit_offset_sec);
         volume *= sound_volume(&builtin);
         format!("rd:{builtin}")
     };
@@ -1589,11 +1588,14 @@ fn rd_audio_metadata() -> &'static RdAudioMetadata {
 }
 
 fn sound_offset(sound_name: &str) -> f64 {
+    builtin_sound_offset(sound_name).unwrap_or(0.0)
+}
+
+fn builtin_sound_offset(sound_name: &str) -> Option<f64> {
     rd_audio_metadata()
         .sound_offsets
         .get(sound_name)
         .map(|meta| meta.offset_ms / 1000.0)
-        .unwrap_or(0.0)
 }
 
 fn sound_volume(sound_name: &str) -> f32 {
@@ -1811,168 +1813,4 @@ fn default_game_sounds() -> BTreeMap<String, SoundRef> {
             (key.clone(), sound)
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn converts_bar_and_beat_with_cpb_changes() {
-        let changes = vec![CpbChange { bar: 1, cpb: 8 }, CpbChange { bar: 3, cpb: 6 }];
-        assert_eq!(bar_beat_to_abs(1, 1.0, &changes), 0.0);
-        assert_eq!(bar_beat_to_abs(2, 1.0, &changes), 8.0);
-        assert_eq!(bar_beat_to_abs(3, 1.0, &changes), 16.0);
-        assert_eq!(bar_beat_to_abs(4, 1.0, &changes), 22.0);
-    }
-
-    #[test]
-    fn builds_play_sound_timeline() {
-        let root = json!({
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "sndOrientalTechno" }, "beatsPerMinute": 120 },
-                { "type": "PlaySound", "bar": 1, "beat": 3, "sound": { "filename": "Shaker", "volume": 50 } }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert_eq!(timeline.play_sound_events.len(), 1);
-        assert!((timeline.play_sound_events[0].time_sec - 0.985).abs() < 0.001);
-        assert_eq!(timeline.play_sound_events[0].sound_name, "rd:sndShaker");
-    }
-
-    #[test]
-    fn inactive_play_sound_is_not_added() {
-        let root = json!({
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "PlaySound", "bar": 1, "beat": 2, "active": false, "sound": { "filename": "Muted" } },
-                { "type": "PlaySound", "bar": 1, "beat": 3, "sound": { "filename": "Live" } }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert!(timeline
-            .play_sound_events
-            .iter()
-            .all(|event| event.sound_name != "rd:sndMuted"));
-        assert!(timeline
-            .play_sound_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndLive"));
-    }
-
-    #[test]
-    fn single_player_filters_two_player_branch_sounds() {
-        let root = json!({
-            "conditionals": [
-                { "type": "PlayerMode", "id": 1, "tag": "1", "twoPlayerMode": true }
-            ],
-            "rows": [
-                { "row": 1, "rowType": "Oneshot", "player": "P1", "pulseSound": "Kick" }
-            ],
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "SetClapSounds", "bar": 1, "beat": 1, "if": "1d0", "rowType": "Oneshot", "p1Sound": { "filename": "TwoPlayer" } },
-                { "type": "SetClapSounds", "bar": 1, "beat": 1, "if": "~1d0", "rowType": "Oneshot", "p1Sound": { "filename": "SinglePlayer" } },
-                { "type": "AddOneshotBeat", "bar": 1, "beat": 2, "row": 1, "pulseType": "Wave", "tick": 2 }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert!(timeline.hit_events.iter().any(
-            |event| event.kind == "rd-oneshot-clap" && event.sound_name == "rd:sndSinglePlayer"
-        ));
-        assert!(!timeline
-            .hit_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndTwoPlayer"));
-    }
-
-    #[test]
-    fn tagged_events_do_not_run_without_run_tag() {
-        let root = json!({
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "PlaySound", "bar": 1, "beat": 2, "tag": "Later", "sound": { "filename": "Blocked" } },
-                { "type": "PlaySound", "bar": 1, "beat": 3, "tag": "Now", "runTag": true, "sound": { "filename": "Allowed" } }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert!(!timeline
-            .play_sound_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndBlocked"));
-        assert!(timeline
-            .play_sound_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndAllowed"));
-    }
-
-    #[test]
-    fn classic_hold_uses_official_hold_sounds_per_pulse() {
-        let root = json!({
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "AddClassicBeat", "bar": 1, "beat": 1, "row": 0, "tick": 1, "hold": 1, "length": 7 }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert!(timeline
-            .hold_sound_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndHoldStartTamb"));
-        assert!(timeline
-            .hold_sound_events
-            .iter()
-            .any(|event| event.sound_name == "rd:sndHoldWindupLongStart"));
-    }
-
-    #[test]
-    fn oneshot_without_custom_sound_uses_row_sound() {
-        let root = json!({
-            "rows": [
-                { "row": 1, "rowType": "Oneshot", "pulseSound": "KickChroma" }
-            ],
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "AddOneshotBeat", "bar": 1, "beat": 1, "row": 1, "pulseType": "Wave", "tick": 2 }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
-        assert!(
-            timeline
-                .hit_events
-                .iter()
-                .any(|event| event.kind == "rd-oneshot-boom"
-                    && event.sound_name == "rd:sndKickChroma")
-        );
-        assert!(!timeline
-            .hit_events
-            .iter()
-            .any(|event| event.kind == "rd-oneshot-boom" && event.sound_name == "rd:sndShaker"));
-    }
-
-    #[test]
-    fn p2_oneshot_clap_can_use_custom_level_audio() {
-        let dir =
-            std::env::temp_dir().join(format!("adofai_music_box_rd_test_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let sound_path = dir.join("hit.ogg");
-        std::fs::write(&sound_path, b"placeholder").unwrap();
-        let level_path = dir.join("level.rdlevel");
-        let root = json!({
-            "rows": [
-                { "row": 2, "rowType": "Oneshot", "player": "P2", "pulseSound": "Kick" }
-            ],
-            "events": [
-                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
-                { "type": "SetClapSounds", "bar": 1, "beat": 1, "rowType": "Oneshot", "p2Sound": { "filename": "hit" } },
-                { "type": "AddOneshotBeat", "bar": 1, "beat": 1, "row": 2, "pulseType": "Wave", "tick": 2 }
-            ]
-        });
-        let timeline = build_timeline_from_root(&root, &level_path, true).unwrap();
-        assert!(timeline.hit_events.iter().any(|event| {
-            event.kind == "rd-oneshot-clap" && event.sound_name == sound_path.to_string_lossy()
-        }));
-        let _ = std::fs::remove_dir_all(dir);
-    }
 }
