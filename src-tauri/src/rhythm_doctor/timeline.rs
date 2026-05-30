@@ -198,6 +198,7 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
     let mut events = array_at(root, "events");
     events.sort_by(|left, right| event_sort_key(left).cmp(&event_sort_key(right)));
     let mut state = TimelineState::default();
+    apply_initial_rows(&mut state, root);
     let mut warned_conditions = false;
 
     for (index, event) in events.iter().enumerate() {
@@ -243,6 +244,12 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
         timeline
             .warnings
             .push("这个 RD 谱面包含条件或标签事件，播放器按静态时间线处理。".to_string());
+    }
+}
+
+fn apply_initial_rows(state: &mut TimelineState, root: &Value) {
+    for row in array_at(root, "rows") {
+        apply_make_row(state, row);
     }
 }
 
@@ -774,7 +781,7 @@ fn append_oneshot_beat(
     let custom_sound = if event.get("sound").is_some() {
         sound_ref_at(event, "sound", "Shaker")
     } else {
-        SoundRef::new("Shaker")
+        row.pulse_sound(1)
     };
 
     for repeat in 0..=loops {
@@ -1778,6 +1785,31 @@ mod tests {
             .hold_sound_events
             .iter()
             .any(|event| event.sound_name == "rd:sndHoldWindupLongStart"));
+    }
+
+    #[test]
+    fn oneshot_without_custom_sound_uses_row_sound() {
+        let root = json!({
+            "rows": [
+                { "row": 1, "rowType": "Oneshot", "pulseSound": "KickChroma" }
+            ],
+            "events": [
+                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
+                { "type": "AddOneshotBeat", "bar": 1, "beat": 1, "row": 1, "pulseType": "Wave", "tick": 2 }
+            ]
+        });
+        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
+        assert!(
+            timeline
+                .hit_events
+                .iter()
+                .any(|event| event.kind == "rd-oneshot-boom"
+                    && event.sound_name == "rd:sndKickChroma")
+        );
+        assert!(!timeline
+            .hit_events
+            .iter()
+            .any(|event| event.kind == "rd-oneshot-boom" && event.sound_name == "rd:sndShaker"));
     }
 
     #[test]
