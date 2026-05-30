@@ -13,9 +13,60 @@ const adofaiRoot = path.join(publicAudioRoot, "adofai");
 const rdRoot = path.join(publicAudioRoot, "rhythm-doctor");
 const rdResourcesRoot = path.join(rdRoot, "resources");
 const rdSourceRoot = process.env.RD_RESOURCES_ROOT || defaultRdResources;
+const tauriAssetRoot = path.join(projectRoot, "src-tauri", "assets");
+
+const GAME_SOUND_TYPES = {
+  0: "ClapSoundP1Classic",
+  1: "ClapSoundP2Classic",
+  2: "ClapSoundP1Oneshot",
+  3: "ClapSoundP2Oneshot",
+  20: "SmallMistake",
+  21: "BigMistake",
+  22: "Hand1PopSound",
+  23: "Hand2PopSound",
+  24: "HeartExplosion",
+  25: "HeartExplosion2",
+  26: "HeartExplosion3",
+  27: "ClapSoundHoldLongEnd",
+  28: "ClapSoundHoldLongStart",
+  29: "ClapSoundHoldShortEnd",
+  30: "ClapSoundHoldShortStart",
+  31: "PulseSoundHoldStart",
+  32: "PulseSoundHoldShortEnd",
+  33: "PulseSoundHoldEnd",
+  34: "PulseSoundHoldStartAlt",
+  35: "PulseSoundHoldShortEndAlt",
+  36: "PulseSoundHoldEndAlt",
+  37: "ClapSoundCPUClassic",
+  38: "ClapSoundCPUOneshot",
+  39: "ClapSoundHoldLongEndP2",
+  40: "ClapSoundHoldLongStartP2",
+  41: "ClapSoundHoldShortEndP2",
+  42: "ClapSoundHoldShortStartP2",
+  43: "PulseSoundHoldStartP2",
+  44: "PulseSoundHoldShortEndP2",
+  45: "PulseSoundHoldEndP2",
+  46: "PulseSoundHoldStartAltP2",
+  47: "PulseSoundHoldShortEndAltP2",
+  48: "PulseSoundHoldEndAltP2",
+  49: "FreezeshotSoundCueLow",
+  50: "FreezeshotSoundCueHigh",
+  51: "FreezeshotSoundRiser",
+  52: "FreezeshotSoundCymbal",
+  53: "BurnshotSoundCueLow",
+  54: "BurnshotSoundCueHigh",
+  55: "BurnshotSoundRiser",
+  56: "BurnshotSoundCymbal",
+  63: "Skipshot",
+  65: "HoldshotSoundCue",
+  66: "HoldshotSoundClapStart",
+  67: "HoldshotSoundClapLongEnd",
+  68: "HoldshotSoundClapShortEnd",
+};
 
 await mkdir(adofaiRoot, { recursive: true });
 await syncRhythmDoctorResources();
+await writeRhythmDoctorMetadata();
 await writeManifest("adofai", adofaiRoot, adofaiRoot);
 await writeManifest("rhythmDoctor", rdRoot, rdRoot);
 
@@ -30,6 +81,28 @@ async function syncRhythmDoctorResources() {
     await copyFile(source, target);
   }
   console.log(`已复制 RD 音频 ${files.length} 个`);
+}
+
+async function writeRhythmDoctorMetadata() {
+  const songOffsetsPath = path.join(rdSourceRoot, "RDSongOffsets.asset");
+  const gameSoundsPath = path.join(rdSourceRoot, "RDGameSounds.prefab");
+  const [songOffsetsText, gameSoundsText] = await Promise.all([
+    readTextIfExists(songOffsetsPath),
+    readTextIfExists(gameSoundsPath),
+  ]);
+  const metadata = {
+    generatedAt: new Date().toISOString(),
+    soundOffsets: parseSongOffsets(songOffsetsText),
+    gameSounds: parseGameSounds(gameSoundsText),
+  };
+  await mkdir(tauriAssetRoot, { recursive: true });
+  await mkdir(rdRoot, { recursive: true });
+  const text = `${JSON.stringify(metadata, null, 2)}\n`;
+  await writeFile(path.join(tauriAssetRoot, "rhythm-doctor-audio-metadata.json"), text, "utf8");
+  await writeFile(path.join(rdRoot, "audio-metadata.json"), text, "utf8");
+  console.log(
+    `已生成 RD 音频元数据，offset ${Object.keys(metadata.soundOffsets).length} 个，game sound ${Object.keys(metadata.gameSounds).length} 个`,
+  );
 }
 
 async function writeManifest(game, scanRoot, manifestRoot) {
@@ -133,4 +206,88 @@ function normalizeAlias(alias) {
 
 function slash(value) {
   return value.replace(/\\/g, "/");
+}
+
+async function readTextIfExists(file) {
+  try {
+    return await import("node:fs/promises").then(({ readFile }) => readFile(file, "utf8"));
+  } catch {
+    return "";
+  }
+}
+
+function parseSongOffsets(text) {
+  const offsets = {};
+  let current = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.startsWith("- name:")) {
+      if (current?.name) {
+        offsets[current.name] = current;
+      }
+      current = {
+        name: valueAfterColon(line),
+        offsetMs: 0,
+        volume: 1,
+        folder: "",
+      };
+      continue;
+    }
+    if (!current || !line.includes(":")) {
+      continue;
+    }
+    const key = line.slice(0, line.indexOf(":")).trim();
+    const value = valueAfterColon(line);
+    if (key === "offset") {
+      current.offsetMs = Math.round(Number(value || 0) * 1000);
+    } else if (key === "volume") {
+      current.volume = Number(value || 1);
+    } else if (key === "folder") {
+      current.folder = value;
+    }
+  }
+  if (current?.name) {
+    offsets[current.name] = current;
+  }
+  return offsets;
+}
+
+function parseGameSounds(text) {
+  const byType = {};
+  let current = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.startsWith("- type:")) {
+      if (current && GAME_SOUND_TYPES[current.type] !== undefined) {
+        byType[GAME_SOUND_TYPES[current.type]] = current;
+      }
+      current = {
+        type: Number(valueAfterColon(line)),
+        filename: "",
+        volume: 1,
+        minPitch: 1,
+        maxPitch: 1,
+        pan: 0,
+      };
+      continue;
+    }
+    if (!current || !line.includes(":")) {
+      continue;
+    }
+    const key = line.slice(0, line.indexOf(":")).trim();
+    const value = valueAfterColon(line);
+    if (key === "filename") {
+      current.filename = value;
+    } else if (key === "volume" || key === "minPitch" || key === "maxPitch" || key === "pan") {
+      current[key] = Number(value || 0);
+    }
+  }
+  if (current && GAME_SOUND_TYPES[current.type] !== undefined) {
+    byType[GAME_SOUND_TYPES[current.type]] = current;
+  }
+  return byType;
+}
+
+function valueAfterColon(line) {
+  return line.slice(line.indexOf(":") + 1).trim();
 }

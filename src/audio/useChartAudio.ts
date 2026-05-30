@@ -38,6 +38,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
   const mainBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const soundBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const scheduledRef = useRef<Set<string>>(new Set());
+  const scheduledSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const intervalRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
   const positionRef = useRef(0);
@@ -90,6 +91,23 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       window.clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+  }, []);
+
+  const stopScheduledSources = useCallback(() => {
+    for (const source of scheduledSourcesRef.current) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // The source may already have ended or may not have started yet.
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // Disconnect can throw if the node is already detached.
+      }
+    }
+    scheduledSourcesRef.current.clear();
   }, []);
 
   const stopSource = useCallback(() => {
@@ -194,6 +212,9 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
         scheduledRef.current.add(key);
         return;
       }
+      if (!playingRef.current) {
+        return;
+      }
 
       const when = Math.max(context.currentTime, targetTime);
       const source = context.createBufferSource();
@@ -203,6 +224,15 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       gain.gain.value = Math.max(0, event.volume * multiplier);
       source.connect(gain);
       gain.connect(context.destination);
+      scheduledSourcesRef.current.add(source);
+      source.onended = () => {
+        scheduledSourcesRef.current.delete(source);
+        try {
+          source.disconnect();
+        } catch {
+          // Already disconnected.
+        }
+      };
 
       if (isLoop) {
         const elapsed = Math.max(0, now - event.timeSec) * Math.max(0.05, event.pitch);
@@ -255,7 +285,9 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
   }, [runScheduler, stopScheduler]);
 
   const finishPlayback = useCallback((notify = true) => {
+    sessionRef.current += 1;
     stopScheduler();
+    stopScheduledSources();
     sourceRef.current = null;
     positionRef.current = durationRef.current;
     playingRef.current = false;
@@ -264,7 +296,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
     if (notify) {
       onEndedRef.current?.();
     }
-  }, [stopScheduler]);
+  }, [stopScheduledSources, stopScheduler]);
 
   const startSource = useCallback(
     (position: number) => {
@@ -278,7 +310,20 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       stopSource();
       const pitch = Math.max(0.05, timeline.pitch);
       const clampedPosition = Math.min(durationRef.current, Math.max(0, position));
-      const rawOffset = Math.min(buffer.duration, clampedPosition * pitch);
+      const rdSongOffsetSec =
+        trackRef.current?.game === "rhythmDoctor" ? (timeline.songOffsetMs ?? 0) / 1000 : 0;
+      const rdLeadInSec = rdSongOffsetSec < 0 ? -rdSongOffsetSec / pitch : 0;
+      const sourceDelaySec =
+        trackRef.current?.game === "rhythmDoctor" && clampedPosition < rdLeadInSec
+          ? rdLeadInSec - clampedPosition
+          : 0;
+      const rawOffset =
+        trackRef.current?.game === "rhythmDoctor"
+          ? Math.min(
+              buffer.duration,
+              Math.max(0, (clampedPosition - rdLeadInSec) * pitch + Math.max(0, rdSongOffsetSec)),
+            )
+          : Math.min(buffer.duration, clampedPosition * pitch);
       if (rawOffset >= buffer.duration) {
         finishPlayback();
         return;
@@ -298,7 +343,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
           finishPlayback();
         }
       };
-      source.start(context.currentTime, rawOffset);
+      source.start(context.currentTime + sourceDelaySec, rawOffset);
       sourceRef.current = source;
       playingRef.current = true;
       setIsPlaying(true);
@@ -319,6 +364,7 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       }
 
       stopScheduler();
+      stopScheduledSources();
       stopSource();
       playingRef.current = false;
       setIsPlaying(false);
@@ -331,12 +377,20 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
       timelineRef.current = timeline;
       positionRef.current = 0;
       startedAtRef.current = 0;
-      durationRef.current = Math.max(timeline.duration, buffer.duration / Math.max(0.05, timeline.pitch));
+      const pitch = Math.max(0.05, timeline.pitch);
+      const rdSongOffsetSec =
+        track.game === "rhythmDoctor" ? (timeline.songOffsetMs ?? 0) / 1000 : 0;
+      const rdLeadInSec = rdSongOffsetSec < 0 ? -rdSongOffsetSec / pitch : 0;
+      const audibleDuration =
+        track.game === "rhythmDoctor"
+          ? rdLeadInSec + Math.max(0, buffer.duration - Math.max(0, rdSongOffsetSec)) / pitch
+          : buffer.duration / pitch;
+      durationRef.current = Math.max(timeline.duration, audibleDuration);
       setCurrentTime(0);
       setDuration(durationRef.current);
       await preloadTimelineSounds(timeline);
     },
-    [decodeUrl, preloadTimelineSounds, stopScheduler, stopSource],
+    [decodeUrl, preloadTimelineSounds, stopScheduledSources, stopScheduler, stopSource],
   );
 
   const play = useCallback(async () => {
@@ -355,22 +409,27 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
     positionRef.current = transportTime();
     playingRef.current = false;
     setIsPlaying(false);
+    sessionRef.current += 1;
     stopScheduler();
+    stopScheduledSources();
     stopSource();
-  }, [stopScheduler, stopSource, transportTime]);
+    scheduledRef.current.clear();
+  }, [stopScheduledSources, stopScheduler, stopSource, transportTime]);
 
   const seek = useCallback(
     (time: number) => {
       const wasPlaying = playingRef.current;
       const nextTime = Math.min(durationRef.current, Math.max(0, time));
       positionRef.current = nextTime;
+      sessionRef.current += 1;
+      stopScheduledSources();
       scheduledRef.current.clear();
       setCurrentTime(nextTime);
       if (wasPlaying) {
         startSource(nextTime);
       }
     },
-    [startSource],
+    [startSource, stopScheduledSources],
   );
 
   const syncClock = useCallback(() => {
@@ -412,12 +471,13 @@ export function useChartAudio(options: UseChartAudioOptions): ChartAudioApi {
     frameRef.current = window.requestAnimationFrame(syncClock);
     return () => {
       stopScheduler();
+      stopScheduledSources();
       stopSource();
       if (frameRef.current !== null) {
         window.cancelAnimationFrame(frameRef.current);
       }
     };
-  }, [stopScheduler, stopSource, syncClock]);
+  }, [stopScheduledSources, stopScheduler, stopSource, syncClock]);
 
   return {
     currentTime,

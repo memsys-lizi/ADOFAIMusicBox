@@ -4,9 +4,11 @@ use super::parser::{
     SoundRef,
 };
 use crate::library::{AudioTimeline, HitEvent};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 struct CpbChange {
@@ -28,26 +30,121 @@ struct BeatClock {
 
 #[derive(Debug, Clone)]
 struct TimelineState {
-    row_beat_sounds: HashMap<i64, SoundRef>,
-    row_patterns: HashMap<i64, String>,
-    classic_clap: SoundRef,
-    oneshot_clap: SoundRef,
-    counting_voice: HashMap<i64, String>,
+    rows: HashMap<i64, RowState>,
     game_sounds: BTreeMap<String, SoundRef>,
+    next_hold_pulse_alt: bool,
 }
 
 impl Default for TimelineState {
     fn default() -> Self {
         Self {
-            row_beat_sounds: HashMap::new(),
-            row_patterns: HashMap::new(),
-            classic_clap: SoundRef::new("ClapHit"),
-            oneshot_clap: SoundRef::new("ClapHit"),
-            counting_voice: HashMap::new(),
+            rows: HashMap::new(),
             game_sounds: default_game_sounds(),
+            next_hold_pulse_alt: false,
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowKind {
+    Classic,
+    Oneshot,
+}
+
+#[derive(Debug, Clone)]
+struct RowState {
+    row_type: RowKind,
+    pulse_sounds: Vec<SoundRef>,
+    show: [bool; 6],
+    synco_beat: i32,
+    synco_swing: f64,
+    synco_volume: f32,
+    synco_pitch: f32,
+    synco_style: String,
+    counting_enabled: bool,
+    counting_sounds: Vec<SoundRef>,
+    counting_subdiv_offset: f64,
+    muted: bool,
+}
+
+impl Default for RowState {
+    fn default() -> Self {
+        let mut row = Self {
+            row_type: RowKind::Classic,
+            pulse_sounds: vec![SoundRef::new("sndKick"); 7],
+            show: [true; 6],
+            synco_beat: -1,
+            synco_swing: 0.0,
+            synco_volume: 0.7,
+            synco_pitch: 1.0,
+            synco_style: "Chirp".to_string(),
+            counting_enabled: false,
+            counting_sounds: Vec::new(),
+            counting_subdiv_offset: 0.5,
+            muted: false,
+        };
+        row.set_counting_sounds("JyiCount", 1.0);
+        row
+    }
+}
+
+impl RowState {
+    fn set_pulse_sounds(&mut self, sound: SoundRef) {
+        self.pulse_sounds = vec![sound; 7];
+    }
+
+    fn pulse_sound(&self, beatbox_number: usize) -> SoundRef {
+        self.pulse_sounds
+            .get(beatbox_number.saturating_sub(1))
+            .cloned()
+            .unwrap_or_else(|| SoundRef::new("sndKick"))
+    }
+
+    fn set_counting_sounds(&mut self, voice_source: &str, volume: f32) {
+        let count = if self.row_type == RowKind::Oneshot {
+            10
+        } else {
+            7
+        };
+        let voice = if self.row_type == RowKind::Oneshot && voice_source == "JyiCount" {
+            "JyiCountEnglish"
+        } else {
+            voice_source
+        };
+        let prefix = counting_voice_prefix(voice);
+        self.counting_sounds = (1..=count)
+            .map(|index| {
+                let mut sound = SoundRef::new(&format!("{prefix}{index}"));
+                sound.volume = volume;
+                sound
+            })
+            .collect();
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RdAudioMetadata {
+    sound_offsets: HashMap<String, RdSoundOffset>,
+    game_sounds: HashMap<String, RdGameSound>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RdSoundOffset {
+    offset_ms: f64,
+    volume: f32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RdGameSound {
+    filename: String,
+    volume: f32,
+    max_pitch: f32,
+}
+
+static RD_AUDIO_METADATA: OnceLock<RdAudioMetadata> = OnceLock::new();
 
 pub fn build_timeline_from_path(path: &Path, lenient: bool) -> Result<AudioTimeline, String> {
     let parsed = parse_level_file(path, lenient)?;
@@ -103,7 +200,7 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
     let mut state = TimelineState::default();
     let mut warned_conditions = false;
 
-    for event in events {
+    for (index, event) in events.iter().enumerate() {
         if !event_is_active(event) {
             continue;
         }
@@ -112,36 +209,25 @@ fn append_events(timeline: &mut AudioTimeline, root: &Value, level_path: &Path, 
             warned_conditions = true;
         }
         match event_type(event) {
+            Some("MakeRow") => apply_make_row(&mut state, event),
             Some("SetBeatSound") => {
                 let row = value_as_i64(event.get("row"), 0);
                 state
-                    .row_beat_sounds
-                    .insert(row, sound_ref_at(event, "sound", "Shaker"));
+                    .row_mut(row)
+                    .set_pulse_sounds(sound_ref_at(event, "sound", "Shaker"));
             }
             Some("SetClapSounds") => apply_clap_sounds(&mut state, event),
             Some("SetGameSound") => apply_game_sound(&mut state, event),
-            Some("SetCountingSound") => {
-                let row = value_as_i64(event.get("row"), 0);
-                state
-                    .counting_voice
-                    .insert(row, value_as_string(event.get("voiceSource"), "JyiCount"));
-            }
-            Some("SetRowXs") => {
-                let row = value_as_i64(event.get("row"), 0);
-                state
-                    .row_patterns
-                    .insert(row, value_as_string(event.get("pattern"), "------"));
-            }
+            Some("SetCountingSound") => apply_counting_sound(&mut state, event),
+            Some("SetRowXs") => apply_row_xs(&mut state, event),
             Some("PlaySound") => append_play_sound(timeline, event, level_path, clock),
             Some("AddClassicBeat") => {
-                append_classic_beat(timeline, event, level_path, clock, &state)
+                append_classic_beat(timeline, event, level_path, clock, &mut state)
             }
-            Some("AddFreeTimeBeat") => {
-                append_free_time_beat(timeline, event, level_path, clock, &state)
-            }
-            Some("PulseFreeTimeBeat") => {
-                append_free_time_pulse(timeline, event, level_path, clock, &state)
-            }
+            Some("AddFreeTimeBeat") => append_free_time_beat(
+                timeline, event, &events, index, level_path, clock, &mut state,
+            ),
+            Some("PulseFreeTimeBeat") => {}
             Some("AddOneshotBeat") => {
                 append_oneshot_beat(timeline, event, level_path, clock, &state)
             }
@@ -188,7 +274,7 @@ fn dedup_cpb_changes(changes: Vec<CpbChange>) -> Vec<CpbChange> {
 
 fn collect_bpm_changes(root: &Value, cpb_changes: &[CpbChange]) -> Vec<BpmChange> {
     let base_bpm = first_play_song(root)
-        .map(|event| value_as_f64(event.get("beatsPerMinute"), 100.0))
+        .map(|event| event_bpm(event, 100.0))
         .unwrap_or(100.0)
         .max(1.0);
     let mut changes = vec![BpmChange {
@@ -202,7 +288,7 @@ fn collect_bpm_changes(root: &Value, cpb_changes: &[CpbChange]) -> Vec<BpmChange
         if event_type(event) == Some("SetBeatsPerMinute") {
             changes.push(BpmChange {
                 beat: bar_beat_to_abs(event_bar(event), event_beat(event), cpb_changes),
-                bpm: value_as_f64(event.get("beatsPerMinute"), base_bpm).max(1.0),
+                bpm: event_bpm(event, base_bpm).max(1.0),
             });
         }
     }
@@ -212,6 +298,13 @@ fn collect_bpm_changes(root: &Value, cpb_changes: &[CpbChange]) -> Vec<BpmChange
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     dedup_bpm_changes(changes)
+}
+
+fn event_bpm(event: &Value, fallback: f64) -> f64 {
+    value_as_f64(
+        event.get("beatsPerMinute"),
+        value_as_f64(event.get("bpm"), fallback),
+    )
 }
 
 fn dedup_bpm_changes(changes: Vec<BpmChange>) -> Vec<BpmChange> {
@@ -237,7 +330,7 @@ fn append_play_sound(
     let sound = sound_ref_at(event, "sound", "Shaker");
     append_sound_ref(
         &mut timeline.play_sound_events,
-        clock.time_at(event_abs(event, clock) + sound.offset_ms / 1000.0),
+        clock.time_at(event_abs(event, clock)),
         None,
         &sound,
         level_path,
@@ -251,148 +344,379 @@ fn append_classic_beat(
     event: &Value,
     level_path: &Path,
     clock: &BeatClock,
-    state: &TimelineState,
+    state: &mut TimelineState,
 ) {
-    let row = value_as_i64(event.get("row"), 0);
+    let row_id = value_as_i64(event.get("row"), 0);
+    let row = state.row(row_id).clone();
+    if row.muted {
+        return;
+    }
     let tick = value_as_f64(event.get("tick"), 1.0).max(0.0);
     let swing = value_as_f64(event.get("swing"), 0.0).clamp(0.0, tick * 2.0);
     let hold = value_as_f64(event.get("hold"), 0.0).max(0.0);
     let length = value_as_i64(event.get("length"), 7).clamp(1, 7) as usize;
     let start = event_abs(event, clock);
-    let sound = if event.get("sound").is_some() {
-        sound_ref_at(event, "sound", "Shaker")
+    let custom_sound = if event.get("sound").is_some() {
+        Some(sound_ref_at(event, "sound", "Shaker"))
     } else {
-        state
-            .row_beat_sounds
-            .get(&row)
-            .cloned()
-            .unwrap_or_else(|| SoundRef::new("Shaker"))
+        None
     };
-    let pattern = state
-        .row_patterns
-        .get(&row)
-        .map(String::as_str)
-        .unwrap_or("------");
+    let beats = classic_beat_times(
+        start,
+        tick,
+        swing,
+        value_as_bool(event.get("legacy"), false),
+        hold,
+        length,
+        row.synco_beat,
+        row.synco_swing,
+    );
+    append_classic_flexible(
+        timeline,
+        &beats,
+        &row,
+        custom_sound.as_ref(),
+        state,
+        level_path,
+        clock,
+        event_bar(event) as usize,
+    );
+}
 
-    if hold > 0.0 {
-        let hold_start = start;
-        let hold_end = start + hold;
-        append_builtin(
-            &mut timeline.hold_sound_events,
-            clock.time_at(hold_start),
-            None,
-            "sndHoldStartTamb",
-            1.0,
-            1.0,
-            event_bar(event) as usize,
-            "rd-hold-start",
-        );
-        append_builtin(
-            &mut timeline.hold_sound_events,
-            clock.time_at(hold_start),
-            Some(clock.time_at(hold_end)),
-            "sndDrumrollBright",
-            0.65,
-            1.0,
-            event_bar(event) as usize,
-            "rd-hold-loop",
-        );
-        append_builtin(
-            &mut timeline.hold_sound_events,
-            clock.time_at(hold_end),
-            None,
-            "sndHoldEndTambShort",
-            1.0,
-            1.0,
-            event_bar(event) as usize,
-            "rd-hold-end",
-        );
-        append_sound_ref(
-            &mut timeline.hit_events,
-            clock.time_at(hold_end),
-            None,
-            &state.classic_clap,
-            level_path,
-            event_bar(event) as usize,
-            "rd-classic-clap",
-        );
-        return;
-    }
+#[derive(Debug, Clone)]
+struct ClassicBeatTime {
+    beatbox_number: i32,
+    press_abs: f64,
+    release_abs: f64,
+}
 
-    for index in 0..length {
-        if pattern_skip(pattern, index) {
+fn classic_beat_times(
+    start: f64,
+    tick: f64,
+    swing: f64,
+    legacy_swing: bool,
+    hold: f64,
+    length: usize,
+    synco_beat: i32,
+    synco_swing: f64,
+) -> Vec<ClassicBeatTime> {
+    (0..length)
+        .map(|index| {
+            let one_based = index + 1;
+            let mut synco_offset = 0.0;
+            if (0..=5).contains(&synco_beat) && index as i32 > synco_beat {
+                synco_offset = -tick * if synco_swing > 0.0 { synco_swing } else { 0.5 };
+            }
+            let mut press = tick * index as f64 + start;
+            if swing != 0.0 {
+                if legacy_swing {
+                    let parity = (start / tick + index as f64).round() % 2.0;
+                    if (parity - 1.0).abs() < 0.0001 {
+                        press = tick * one_based as f64 + start - swing;
+                    }
+                } else if one_based % 2 == 0 {
+                    press = start + tick * one_based as f64 - swing;
+                }
+            }
+            let press_abs = press + synco_offset;
+            ClassicBeatTime {
+                beatbox_number: 8 - length as i32 + index as i32,
+                press_abs,
+                release_abs: press_abs + hold,
+            }
+        })
+        .collect()
+}
+
+fn append_classic_flexible(
+    timeline: &mut AudioTimeline,
+    beats: &[ClassicBeatTime],
+    row: &RowState,
+    custom_sound: Option<&SoundRef>,
+    state: &mut TimelineState,
+    level_path: &Path,
+    clock: &BeatClock,
+    source_floor: usize,
+) {
+    let has_held_pulses = beats
+        .iter()
+        .any(|beat| (beat.release_abs - beat.press_abs).abs() > 0.0001);
+
+    for (index, beat) in beats.iter().enumerate() {
+        let beatbox_number = beat.beatbox_number;
+        if beatbox_number == -99 {
+            break;
+        }
+        if beatbox_number <= 0 {
             continue;
         }
-        let beat = start + classic_offset(index, tick, swing, hold);
-        if index + 1 == length {
-            append_sound_ref(
-                &mut timeline.hit_events,
-                clock.time_at(beat),
-                None,
-                &state.classic_clap,
-                level_path,
-                event_bar(event) as usize,
-                "rd-classic-clap",
+        let is_seventh = beatbox_number == 7;
+        let visible = !is_seventh
+            && row
+                .show
+                .get((beatbox_number - 1) as usize)
+                .copied()
+                .unwrap_or(true);
+        if !(visible || is_seventh) {
+            continue;
+        }
+
+        let press_time = clock.time_at(beat.press_abs);
+        let release_time = clock.time_at(beat.release_abs);
+        if is_seventh {
+            if has_held_pulses {
+                append_held_clap(
+                    timeline,
+                    state,
+                    press_time,
+                    release_time,
+                    false,
+                    source_floor,
+                    "rd-classic-held-clap",
+                );
+            } else {
+                append_game_sound_to(
+                    &mut timeline.hit_events,
+                    state,
+                    "ClapSoundP1Classic",
+                    press_time,
+                    None,
+                    source_floor,
+                    "rd-classic-clap",
+                );
+            }
+        } else if has_held_pulses && (beat.release_abs - beat.press_abs).abs() > 0.0001 {
+            append_held_pulse(
+                timeline,
+                state,
+                press_time,
+                release_time,
+                source_floor,
+                "rd-classic-held-pulse",
             );
         } else {
+            let sound = custom_sound
+                .cloned()
+                .unwrap_or_else(|| row.pulse_sound(beatbox_number as usize));
             append_sound_ref(
                 &mut timeline.hit_events,
-                clock.time_at(beat),
+                press_time,
                 None,
                 &sound,
                 level_path,
-                event_bar(event) as usize,
+                source_floor,
                 "rd-classic-pulse",
             );
         }
+
+        if row.counting_enabled {
+            if let Some(count) = row.counting_sounds.get((beatbox_number - 1) as usize) {
+                append_sound_ref(
+                    &mut timeline.play_sound_events,
+                    press_time,
+                    None,
+                    count,
+                    level_path,
+                    source_floor,
+                    "rd-counting",
+                );
+            }
+        }
+        append_synco_sound(timeline, row, index, press_time, source_floor);
     }
+}
+
+fn append_synco_sound(
+    timeline: &mut AudioTimeline,
+    row: &RowState,
+    index: usize,
+    press_time: f64,
+    source_floor: usize,
+) {
+    if !(0..=5).contains(&row.synco_beat) {
+        return;
+    }
+    let sound = match row.synco_style.as_str() {
+        "Chirp" if index as i32 == row.synco_beat => Some("sndSyncoPull"),
+        "Chirp" if index as i32 == row.synco_beat + 1 => Some("sndSyncoRelease"),
+        "Chirp" if index == 0 => Some("sndSyncoFirstPulse"),
+        "Beep" if index == 6 => Some("sndSyncopationBeepHigh"),
+        "Beep" if index as i32 == row.synco_beat + 1 => Some("sndSyncopationBeepMid"),
+        "Beep" if index % 2 == 0 && index as i32 <= row.synco_beat => Some("sndSyncopationBeepLow"),
+        _ => None,
+    };
+    if let Some(sound) = sound {
+        append_builtin(
+            &mut timeline.play_sound_events,
+            press_time,
+            None,
+            sound,
+            row.synco_volume,
+            row.synco_pitch,
+            source_floor,
+            "rd-synco",
+        );
+    }
+}
+
+fn append_held_pulse(
+    timeline: &mut AudioTimeline,
+    state: &mut TimelineState,
+    start: f64,
+    end: f64,
+    source_floor: usize,
+    kind: &str,
+) {
+    let duration = (end - start).max(0.0);
+    let is_short = duration < game_sound_offset(state, "PulseSoundHoldEnd");
+    let use_alt = state.next_hold_pulse_alt;
+    state.next_hold_pulse_alt = !state.next_hold_pulse_alt;
+    let start_type = if use_alt {
+        "PulseSoundHoldStartAlt"
+    } else {
+        "PulseSoundHoldStart"
+    };
+    let end_type = match (use_alt, is_short) {
+        (true, true) => "PulseSoundHoldShortEndAlt",
+        (true, false) => "PulseSoundHoldEndAlt",
+        (false, true) => "PulseSoundHoldShortEnd",
+        (false, false) => "PulseSoundHoldEnd",
+    };
+    append_game_sound_to(
+        &mut timeline.hold_sound_events,
+        state,
+        start_type,
+        start,
+        Some(end),
+        source_floor,
+        kind,
+    );
+    append_game_sound_to(
+        &mut timeline.hold_sound_events,
+        state,
+        end_type,
+        end,
+        None,
+        source_floor,
+        "rd-held-pulse-end",
+    );
+}
+
+fn append_held_clap(
+    timeline: &mut AudioTimeline,
+    state: &TimelineState,
+    start: f64,
+    end: f64,
+    oneshot: bool,
+    source_floor: usize,
+    kind: &str,
+) {
+    let duration = (end - start).max(0.0);
+    let long_end = if oneshot {
+        "HoldshotSoundClapLongEnd"
+    } else {
+        "ClapSoundHoldLongEnd"
+    };
+    let short_end = if oneshot {
+        "HoldshotSoundClapShortEnd"
+    } else {
+        "ClapSoundHoldShortEnd"
+    };
+    let start_type = if oneshot {
+        "HoldshotSoundClapStart"
+    } else {
+        "ClapSoundHoldLongStart"
+    };
+    let end_type = if duration < game_sound_offset(state, long_end) {
+        short_end
+    } else {
+        long_end
+    };
+    append_game_sound_to(
+        &mut timeline.hold_sound_events,
+        state,
+        start_type,
+        start,
+        Some(end),
+        source_floor,
+        kind,
+    );
+    append_game_sound_to(
+        &mut timeline.hold_sound_events,
+        state,
+        end_type,
+        end,
+        None,
+        source_floor,
+        "rd-held-clap-end",
+    );
 }
 
 fn append_free_time_beat(
     timeline: &mut AudioTimeline,
     event: &Value,
+    events: &[&Value],
+    event_index: usize,
     level_path: &Path,
     clock: &BeatClock,
-    state: &TimelineState,
+    state: &mut TimelineState,
 ) {
-    let row = value_as_i64(event.get("row"), 0);
-    let sound = state
-        .row_beat_sounds
-        .get(&row)
-        .cloned()
-        .unwrap_or_else(|| SoundRef::new("Shaker"));
-    append_sound_ref(
-        &mut timeline.hit_events,
-        clock.time_at(event_abs(event, clock)),
-        None,
-        &sound,
-        level_path,
-        event_bar(event) as usize,
-        "rd-free-time",
-    );
-}
+    let row_id = value_as_i64(event.get("row"), 0);
+    let row = state.row(row_id).clone();
+    if row.muted {
+        return;
+    }
+    let mut pulse = value_as_i64(event.get("pulse"), 0).clamp(0, 6) as i32;
+    let mut beats = vec![ClassicBeatTime {
+        beatbox_number: pulse + 1,
+        press_abs: event_abs(event, clock),
+        release_abs: event_abs(event, clock) + value_as_f64(event.get("hold"), 0.0).max(0.0),
+    }];
 
-fn append_free_time_pulse(
-    timeline: &mut AudioTimeline,
-    event: &Value,
-    level_path: &Path,
-    clock: &BeatClock,
-    state: &TimelineState,
-) {
-    let row = value_as_i64(event.get("row"), 0);
-    let sound = state
-        .row_beat_sounds
-        .get(&row)
-        .cloned()
-        .unwrap_or_else(|| SoundRef::new("Shaker"));
-    append_sound_ref(
-        &mut timeline.hit_events,
-        clock.time_at(event_abs(event, clock)),
+    if pulse != 6 {
+        for next in events.iter().skip(event_index + 1) {
+            if !event_is_active(next)
+                || event_type(next) != Some("PulseFreeTimeBeat")
+                || value_as_i64(next.get("row"), 0) != row_id
+            {
+                continue;
+            }
+            let action = value_as_string(next.get("action"), "Increment");
+            if action == "Remove" {
+                beats.push(ClassicBeatTime {
+                    beatbox_number: -99,
+                    press_abs: event_abs(next, clock),
+                    release_abs: event_abs(next, clock),
+                });
+                break;
+            }
+            pulse = match action.as_str() {
+                "Decrement" => pulse - 1,
+                "Custom" => value_as_i64(next.get("customPulse"), pulse as i64) as i32,
+                _ => pulse + 1,
+            }
+            .clamp(0, 6);
+            let press_abs = event_abs(next, clock);
+            beats.push(ClassicBeatTime {
+                beatbox_number: pulse + 1,
+                press_abs,
+                release_abs: press_abs + value_as_f64(next.get("hold"), 0.0).max(0.0),
+            });
+            if pulse == 6 {
+                break;
+            }
+        }
+    }
+
+    append_classic_flexible(
+        timeline,
+        &beats,
+        &row,
         None,
-        &sound,
+        state,
         level_path,
+        clock,
         event_bar(event) as usize,
-        "rd-free-time-pulse",
     );
 }
 
@@ -403,7 +727,11 @@ fn append_oneshot_beat(
     clock: &BeatClock,
     state: &TimelineState,
 ) {
-    let row = value_as_i64(event.get("row"), 0);
+    let row_id = value_as_i64(event.get("row"), 0);
+    let row = state.row(row_id).clone();
+    if row.muted {
+        return;
+    }
     let pulse_type = value_as_string(event.get("pulseType"), "Wave");
     let freeze_burn = value_as_string(event.get("freezeBurnMode"), "None");
     let tick = value_as_f64(event.get("tick"), 1.0).max(0.0);
@@ -413,29 +741,36 @@ fn append_oneshot_beat(
         0.0
     };
     let loops = value_as_i64(event.get("loops"), 0).max(0) as usize;
+    let hold = value_as_bool(event.get("hold"), false);
+    let hold_cue = value_as_string(event.get("holdCue"), "Auto");
     let interval = if freeze_burn != "None"
         || loops > 0
         || value_as_bool(event.get("skipshot"), false)
-        || value_as_bool(event.get("hold"), false)
+        || hold
     {
         value_as_f64(event.get("interval"), 2.0).max(0.0)
     } else {
         (2.0 * tick).max(0.0)
     };
-    let freeze_offset = match freeze_burn.as_str() {
-        "Freezeshot" => (interval - tick).max(0.0),
-        "Burnshot" => interval.max(0.0),
-        _ => 0.0,
+    let freeze_offset = if freeze_burn == "Freezeshot" || (hold && hold_cue != "Late") {
+        (interval - tick).max(0.0)
+    } else if freeze_burn == "Burnshot" {
+        interval.max(0.0)
+    } else {
+        0.0
     };
     let start = (event_abs(event, clock) - freeze_offset).max(0.0);
-    let subdivisions = if pulse_type == "Square" {
-        1
-    } else if pulse_type == "Triangle" {
-        value_as_i64(event.get("subdivisions"), 1).clamp(1, 10) as usize
-    } else {
-        0
+    let subdivisions = match pulse_type.as_str() {
+        "Square" => 1,
+        "Triangle" => value_as_i64(event.get("subdivisions"), 1).clamp(1, 10) as usize,
+        _ => 0,
     };
     let subdiv_sound = value_as_bool(event.get("subdivSound"), true);
+    let subdiv_tick_override = if subdivisions > 1 && freeze_burn == "Burnshot" {
+        value_as_f64(event.get("subdivTickOverride"), 0.0).max(0.0)
+    } else {
+        0.0
+    };
     let custom_sound = if event.get("sound").is_some() {
         sound_ref_at(event, "sound", "Shaker")
     } else {
@@ -443,80 +778,30 @@ fn append_oneshot_beat(
     };
 
     for repeat in 0..=loops {
-        let cue_abs = start + interval * repeat as f64;
-        let hit_abs = cue_abs + freeze_offset + tick + delay;
-        append_freeze_burn_cues(
+        let repeat_start = start + interval * repeat as f64;
+        append_oneshot_counting_sound(
             timeline,
             clock,
-            cue_abs,
-            hit_abs,
-            &freeze_burn,
-            event_bar(event) as usize,
-        );
-        append_counting_sound(
-            timeline,
-            clock,
-            cue_abs,
+            repeat_start,
             tick,
+            interval,
             subdivisions,
-            row,
-            state,
-            event_bar(event) as usize,
-        );
-
-        if pulse_type == "Triangle" && subdivisions > 1 {
-            let step = tick / subdivisions as f64;
-            for index in 0..subdivisions {
-                let beat = cue_abs + step * index as f64;
-                let sound_name = if subdiv_sound {
-                    format!("sndTriangleshot{}", index + 1)
-                } else {
-                    builtin_sound_name(&custom_sound.filename)
-                };
-                append_builtin(
-                    &mut timeline.hit_events,
-                    clock.time_at(beat),
-                    None,
-                    &sound_name,
-                    custom_sound.volume,
-                    custom_sound.pitch,
-                    event_bar(event) as usize,
-                    "rd-oneshot-subdivision",
-                );
-            }
-        }
-
-        let hit_sound = if pulse_type == "Square" && subdiv_sound {
-            SoundRef::new("Squareshot")
-        } else {
-            custom_sound.clone()
-        };
-        append_sound_ref(
-            &mut timeline.hit_events,
-            clock.time_at(hit_abs),
-            None,
-            &hit_sound,
+            subdiv_tick_override,
+            &freeze_burn,
+            &row,
             level_path,
             event_bar(event) as usize,
-            "rd-oneshot-hit",
         );
-
-        append_sound_ref(
-            &mut timeline.hit_events,
-            clock.time_at(hit_abs),
-            None,
-            &state.oneshot_clap,
-            level_path,
-            event_bar(event) as usize,
-            "rd-oneshot-clap",
-        );
-
         if value_as_bool(event.get("skipshot"), false) {
-            let skip_abs = cue_abs + interval;
+            let subdiv_offset = if pulse_type == "Triangle" && subdivisions > 1 {
+                tick * (1.0 - 1.0 / subdivisions as f64)
+            } else {
+                0.0
+            };
             append_game_sound(
                 timeline,
                 clock,
-                skip_abs,
+                repeat_start + freeze_offset + tick + delay + subdiv_offset,
                 "Skipshot",
                 state,
                 event_bar(event) as usize,
@@ -524,118 +809,270 @@ fn append_oneshot_beat(
             );
         }
 
-        if value_as_bool(event.get("hold"), false) {
-            let end_abs = cue_abs + interval;
-            append_game_sound(
-                timeline,
+        if pulse_type == "Triangle" && subdivisions > 1 {
+            let subdiv_tick = if freeze_burn == "Burnshot" && subdiv_tick_override > 0.0 {
+                subdiv_tick_override
+            } else if freeze_burn == "Burnshot" {
+                interval / 2.0
+            } else {
+                tick
+            };
+            let step = subdiv_tick / subdivisions as f64;
+            let mut hold_cue_offset = hold_cue_offset(
+                hold,
+                &hold_cue,
+                freeze_burn == "Burnshot",
+                interval,
+                tick,
                 clock,
-                hit_abs,
-                "HoldshotSoundCue",
+                repeat_start,
+            );
+            hold_cue_offset += step * (subdivisions - 1) as f64;
+            for index in 0..subdivisions {
+                let sound = if subdiv_sound {
+                    SoundRef::new(&format!("sndTriangleshot{}", index + 1))
+                } else {
+                    custom_sound.clone()
+                };
+                let hold_duration = if hold && index + 1 == subdivisions {
+                    (interval - (tick + delay + step * index as f64)).max(0.0)
+                } else {
+                    0.0
+                };
+                append_oneshot_instance(
+                    timeline,
+                    state,
+                    level_path,
+                    clock,
+                    repeat_start + step * index as f64,
+                    tick,
+                    &sound,
+                    delay,
+                    freeze_offset,
+                    freeze_burn == "Burnshot",
+                    hold_duration,
+                    hold_cue_offset,
+                    index > 0,
+                    event_bar(event) as usize,
+                );
+            }
+        } else {
+            let sound = if pulse_type == "Square" && subdiv_sound {
+                SoundRef::new("sndSquareshot")
+            } else {
+                custom_sound.clone()
+            };
+            let hold_duration = if hold {
+                (interval - (tick + delay)).max(0.0)
+            } else {
+                0.0
+            };
+            let hold_cue_offset = hold_cue_offset(
+                hold,
+                &hold_cue,
+                freeze_burn == "Burnshot",
+                interval,
+                tick,
+                clock,
+                repeat_start,
+            );
+            append_oneshot_instance(
+                timeline,
                 state,
+                level_path,
+                clock,
+                repeat_start,
+                tick,
+                &sound,
+                delay,
+                freeze_offset,
+                freeze_burn == "Burnshot",
+                hold_duration,
+                hold_cue_offset,
+                false,
                 event_bar(event) as usize,
-                "rd-holdshot-cue",
-            );
-            append_builtin(
-                &mut timeline.hold_sound_events,
-                clock.time_at(hit_abs),
-                Some(clock.time_at(end_abs)),
-                "sndHoldStartTamb",
-                0.8,
-                1.0,
-                event_bar(event) as usize,
-                "rd-oneshot-hold",
             );
         }
     }
 }
 
-fn append_freeze_burn_cues(
+#[allow(clippy::too_many_arguments)]
+fn append_oneshot_instance(
     timeline: &mut AudioTimeline,
-    clock: &BeatClock,
-    cue_abs: f64,
-    hit_abs: f64,
-    mode: &str,
-    source_floor: usize,
-) {
-    match mode {
-        "Freezeshot" => {
-            append_builtin(
-                &mut timeline.play_sound_events,
-                clock.time_at(cue_abs),
-                None,
-                "sndFreezeshotCueLow",
-                1.0,
-                1.0,
-                source_floor,
-                "rd-freezeshot-cue",
-            );
-            append_builtin(
-                &mut timeline.play_sound_events,
-                clock.time_at(hit_abs),
-                None,
-                "sndFreezeshotCymbal",
-                1.0,
-                1.0,
-                source_floor,
-                "rd-freezeshot-hit",
-            );
-        }
-        "Burnshot" => {
-            append_builtin(
-                &mut timeline.play_sound_events,
-                clock.time_at(cue_abs),
-                None,
-                "sndBurnshotCueLow",
-                1.0,
-                1.0,
-                source_floor,
-                "rd-burnshot-cue",
-            );
-            append_builtin(
-                &mut timeline.play_sound_events,
-                clock.time_at(hit_abs),
-                None,
-                "sndBurnshotCymbal",
-                1.0,
-                1.0,
-                source_floor,
-                "rd-burnshot-hit",
-            );
-        }
-        _ => {}
-    }
-}
-
-fn append_counting_sound(
-    timeline: &mut AudioTimeline,
-    clock: &BeatClock,
-    cue_abs: f64,
-    tick: f64,
-    subdivisions: usize,
-    row: i64,
     state: &TimelineState,
+    level_path: &Path,
+    clock: &BeatClock,
+    boom_start: f64,
+    tick: f64,
+    hit_sound: &SoundRef,
+    delay: f64,
+    delay_beat_offset: f64,
+    is_burnshot: bool,
+    hold_duration: f64,
+    hold_cue_offset: f64,
+    second_subdivision_or_later: bool,
     source_floor: usize,
 ) {
-    if subdivisions <= 1 {
+    let freezeshot = delay > 0.0;
+    let boom = boom_start + delay_beat_offset;
+    let chak = boom + tick + delay;
+    let pre_delay_hit = boom + tick;
+    let release = chak + hold_duration;
+    let first_cue = boom_start;
+    let second_cue = boom_start + if freezeshot { delay } else { tick };
+
+    append_sound_ref(
+        &mut timeline.hit_events,
+        clock.time_at(boom),
+        None,
+        hit_sound,
+        level_path,
+        source_floor,
+        "rd-oneshot-boom",
+    );
+    append_game_sound_to(
+        &mut timeline.hit_events,
+        state,
+        "ClapSoundP1Oneshot",
+        clock.time_at(chak),
+        None,
+        source_floor,
+        "rd-oneshot-clap",
+    );
+
+    if !second_subdivision_or_later {
+        if freezeshot {
+            for (sound_type, beat) in [
+                ("FreezeshotSoundCueLow", first_cue),
+                ("FreezeshotSoundCueHigh", second_cue),
+                ("FreezeshotSoundCueHigh", pre_delay_hit),
+                ("FreezeshotSoundRiser", pre_delay_hit - 0.74),
+                ("FreezeshotSoundCueLow", chak),
+                ("FreezeshotSoundCymbal", chak),
+            ] {
+                append_game_sound(
+                    timeline,
+                    clock,
+                    beat,
+                    sound_type,
+                    state,
+                    source_floor,
+                    "rd-freezeshot",
+                );
+            }
+        } else if is_burnshot {
+            for (sound_type, beat) in [
+                ("BurnshotSoundCueLow", first_cue),
+                ("BurnshotSoundCueHigh", second_cue),
+                ("BurnshotSoundCueHigh", boom),
+                ("BurnshotSoundRiser", boom),
+                ("BurnshotSoundCueLow", chak),
+                ("BurnshotSoundCymbal", chak),
+            ] {
+                append_game_sound(
+                    timeline,
+                    clock,
+                    beat,
+                    sound_type,
+                    state,
+                    source_floor,
+                    "rd-burnshot",
+                );
+            }
+        }
+    }
+
+    if hold_duration > 0.0 {
+        append_held_clap(
+            timeline,
+            state,
+            clock.time_at(chak),
+            clock.time_at(release),
+            true,
+            source_floor,
+            "rd-holdshot-clap",
+        );
+        append_game_sound(
+            timeline,
+            clock,
+            boom - hold_cue_offset,
+            "HoldshotSoundCue",
+            state,
+            source_floor,
+            "rd-holdshot-cue",
+        );
+    }
+}
+
+fn hold_cue_offset(
+    hold: bool,
+    hold_cue: &str,
+    is_burnshot: bool,
+    interval: f64,
+    tick: f64,
+    clock: &BeatClock,
+    start: f64,
+) -> f64 {
+    if !hold {
+        return 0.0;
+    }
+    let auto_early = clock.duration_between(start, tick) <= 0.666;
+    if hold_cue == "Early" || (hold_cue == "Auto" && auto_early) {
+        if is_burnshot {
+            interval
+        } else {
+            (interval - tick).max(0.0)
+        }
+    } else {
+        0.0
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_oneshot_counting_sound(
+    timeline: &mut AudioTimeline,
+    clock: &BeatClock,
+    start: f64,
+    tick: f64,
+    interval: f64,
+    subdivisions: usize,
+    subdiv_tick_override: f64,
+    freeze_burn: &str,
+    row: &RowState,
+    level_path: &Path,
+    source_floor: usize,
+) {
+    if !row.counting_enabled || subdivisions == 0 {
         return;
     }
-    let voice = state
-        .counting_voice
-        .get(&row)
-        .map(String::as_str)
-        .unwrap_or("JyiCountEnglish");
-    let prefix = counting_voice_prefix(voice);
-    let sound_name = format!("{prefix}{subdivisions}");
-    append_builtin(
-        &mut timeline.play_sound_events,
-        clock.time_at((cue_abs - tick).max(0.0)),
-        None,
-        &sound_name,
-        1.0,
-        1.0,
-        source_floor,
-        "rd-counting",
-    );
+    let count_tick = if freeze_burn != "Burnshot" {
+        tick
+    } else if subdiv_tick_override > 0.0 {
+        subdiv_tick_override
+    } else {
+        interval / 2.0
+    };
+    let mut count_offset = if subdivisions == 1 {
+        0.0
+    } else {
+        row.counting_subdiv_offset * count_tick
+    };
+    if freeze_burn == "Freezeshot" {
+        count_offset -= interval - tick;
+    } else if freeze_burn == "Burnshot" {
+        count_offset -= interval;
+    }
+    if let Some(sound) = row.counting_sounds.get(subdivisions.saturating_sub(1)) {
+        append_sound_ref(
+            &mut timeline.play_sound_events,
+            clock.time_at(start - count_offset),
+            None,
+            sound,
+            level_path,
+            source_floor,
+            "rd-counting",
+        );
+    }
 }
 
 fn append_ready_get_set_go(timeline: &mut AudioTimeline, event: &Value, clock: &BeatClock) {
@@ -734,19 +1171,32 @@ fn apply_clap_sounds(state: &mut TimelineState, event: &Value) {
     let row_type = value_as_string(event.get("rowType"), "Classic");
     let sound = sound_ref_at(event, "p1Sound", "ClapHit");
     if row_type == "Oneshot" {
-        state.oneshot_clap = sound;
+        state
+            .game_sounds
+            .insert("ClapSoundP1Oneshot".to_string(), sound);
     } else {
-        state.classic_clap = sound;
+        state
+            .game_sounds
+            .insert("ClapSoundP1Classic".to_string(), sound);
     }
 }
 
 fn apply_game_sound(state: &mut TimelineState, event: &Value) {
     let sound_type = value_as_string(event.get("soundType"), "SmallMistake");
     if let Some(sounds) = event.get("sounds").and_then(Value::as_array) {
-        if let Some(first) = sounds.first() {
-            state
-                .game_sounds
-                .insert(sound_type, super::parser::decode_sound_ref(Some(first), ""));
+        let group = game_sound_group(&sound_type);
+        if sounds.len() == group.len() {
+            for (sound, subtype) in sounds.iter().zip(group.iter()) {
+                let decoded = super::parser::decode_sound_ref(Some(sound), "");
+                if decoded.used {
+                    state.game_sounds.insert((*subtype).to_string(), decoded);
+                }
+            }
+        } else if let Some(first) = sounds.first() {
+            let decoded = super::parser::decode_sound_ref(Some(first), "");
+            if decoded.used {
+                state.game_sounds.insert(sound_type, decoded);
+            }
         }
         return;
     }
@@ -754,6 +1204,89 @@ fn apply_game_sound(state: &mut TimelineState, event: &Value) {
     if !sound.filename.is_empty() {
         state.game_sounds.insert(sound_type, sound);
     }
+}
+
+fn apply_make_row(state: &mut TimelineState, event: &Value) {
+    let row_id = value_as_i64(event.get("row"), 0);
+    let row = state.row_mut(row_id);
+    row.row_type = if value_as_string(event.get("rowType"), "Classic") == "Oneshot" {
+        RowKind::Oneshot
+    } else {
+        RowKind::Classic
+    };
+    row.muted =
+        value_as_bool(event.get("muteBeats"), false) || value_as_bool(event.get("muteIn1P"), false);
+    row.set_pulse_sounds(sound_ref_from_keys(
+        event,
+        "pulseSound",
+        "pulseSoundVolume",
+        "pulseSoundPitch",
+        "pulseSoundOffset",
+        "Shaker",
+    ));
+    if row.counting_sounds.is_empty() {
+        row.set_counting_sounds("JyiCount", 1.0);
+    }
+}
+
+fn apply_counting_sound(state: &mut TimelineState, event: &Value) {
+    let row = state.row_mut(value_as_i64(event.get("row"), 0));
+    row.counting_enabled = value_as_bool(event.get("enabled"), true);
+    row.counting_subdiv_offset = value_as_f64(event.get("subdivOffset"), 0.5);
+    if !row.counting_enabled {
+        return;
+    }
+    let volume = (value_as_f64(event.get("volume"), 100.0) / 100.0) as f32;
+    if value_as_string(event.get("voiceSource"), "JyiCount") == "Custom" {
+        if let Some(sounds) = event.get("sounds").and_then(Value::as_array) {
+            row.counting_sounds = sounds
+                .iter()
+                .map(|sound| {
+                    let mut decoded = super::parser::decode_sound_ref(Some(sound), "");
+                    decoded.volume *= volume;
+                    decoded
+                })
+                .collect();
+        }
+    } else {
+        let voice = value_as_string(event.get("voiceSource"), "JyiCount");
+        row.set_counting_sounds(&voice, volume);
+    }
+}
+
+fn apply_row_xs(state: &mut TimelineState, event: &Value) {
+    let row = state.row_mut(value_as_i64(event.get("row"), 0));
+    row.show = show_beats_from_pattern(&value_as_string(event.get("pattern"), "------"));
+    row.synco_beat = value_as_i64(event.get("syncoBeat"), -1) as i32;
+    row.synco_swing = value_as_f64(event.get("syncoSwing"), 0.0).clamp(0.0, 1.0);
+    row.synco_volume = (value_as_f64(event.get("syncoVolume"), 70.0) / 100.0) as f32;
+    row.synco_pitch = (value_as_f64(event.get("syncoPitch"), 100.0) / 100.0) as f32;
+    row.synco_style = value_as_string(event.get("syncoStyle"), "Chirp");
+}
+
+fn append_game_sound_to(
+    events: &mut Vec<HitEvent>,
+    state: &TimelineState,
+    sound_type: &str,
+    time_sec: f64,
+    end_time_sec: Option<f64>,
+    source_floor: usize,
+    kind: &str,
+) {
+    let sound = state
+        .game_sounds
+        .get(sound_type)
+        .cloned()
+        .unwrap_or_else(|| SoundRef::new(sound_type));
+    append_sound_ref(
+        events,
+        time_sec,
+        end_time_sec,
+        &sound,
+        Path::new(""),
+        source_floor,
+        kind,
+    );
 }
 
 fn append_game_sound(
@@ -846,6 +1379,20 @@ impl BeatClock {
         }
         time + (target - previous_beat).max(0.0) * 60.0 / bpm
     }
+
+    fn duration_between(&self, start_beat: f64, duration_beats: f64) -> f64 {
+        (self.time_at(start_beat + duration_beats) - self.time_at(start_beat)).max(0.0)
+    }
+}
+
+impl TimelineState {
+    fn row(&self, row_id: i64) -> RowState {
+        self.rows.get(&row_id).cloned().unwrap_or_default()
+    }
+
+    fn row_mut(&mut self, row_id: i64) -> &mut RowState {
+        self.rows.entry(row_id).or_default()
+    }
 }
 
 fn append_sound_ref(
@@ -860,13 +1407,40 @@ fn append_sound_ref(
     if !sound.used || sound.filename.trim().is_empty() || sound.filename == "None" {
         return;
     }
-    let sound_name = sound_name_for_ref(sound, level_path);
+    let filename = sound.filename.trim();
+    let pitch = sound.pitch.max(0.05);
+    let mut volume = sound.volume;
+    let mut offset_sec = sound.offset_ms / 1000.0;
+    let sound_name = if filename.contains('\\')
+        || filename.contains('/')
+        || super::parser::has_audio_extension(filename)
+    {
+        if let Some(path) =
+            super::parser::resolve_sibling(level_path, Some(filename)).filter(|path| path.exists())
+        {
+            path.to_string_lossy().to_string()
+        } else {
+            let builtin = builtin_sound_name(filename);
+            if offset_sec == 0.0 {
+                offset_sec = sound_offset(&builtin);
+            }
+            volume *= sound_volume(&builtin);
+            format!("rd:{builtin}")
+        }
+    } else {
+        let builtin = builtin_sound_name(filename);
+        if offset_sec == 0.0 {
+            offset_sec = sound_offset(&builtin);
+        }
+        volume *= sound_volume(&builtin);
+        format!("rd:{builtin}")
+    };
     events.push(HitEvent {
-        time_sec: time_sec.max(0.0),
+        time_sec: (time_sec - offset_sec / pitch as f64).max(0.0),
         end_time_sec,
         sound_name,
-        volume: sound.volume,
-        pitch: sound.pitch.max(0.05),
+        volume,
+        pitch,
         source_floor,
         kind: kind.to_string(),
     });
@@ -882,30 +1456,134 @@ fn append_builtin(
     source_floor: usize,
     kind: &str,
 ) {
-    events.push(HitEvent {
-        time_sec: time_sec.max(0.0),
+    append_sound_ref(
+        events,
+        time_sec,
         end_time_sec,
-        sound_name: format!("rd:{}", sound_name.trim()),
-        volume,
-        pitch: pitch.max(0.05),
+        &SoundRef {
+            filename: sound_name.trim().to_string(),
+            volume,
+            pitch,
+            offset_ms: 0.0,
+            used: true,
+        },
+        Path::new(""),
         source_floor,
-        kind: kind.to_string(),
-    });
+        kind,
+    );
 }
 
-fn sound_name_for_ref(sound: &SoundRef, level_path: &Path) -> String {
-    let filename = sound.filename.trim();
-    if filename.contains('\\')
-        || filename.contains('/')
-        || super::parser::has_audio_extension(filename)
-    {
-        if let Some(path) =
-            super::parser::resolve_sibling(level_path, Some(filename)).filter(|path| path.exists())
-        {
-            return path.to_string_lossy().to_string();
-        }
+fn sound_ref_from_keys(
+    event: &Value,
+    filename_key: &str,
+    volume_key: &str,
+    pitch_key: &str,
+    offset_key: &str,
+    fallback: &str,
+) -> SoundRef {
+    let mut sound = SoundRef::new(&value_as_string(event.get(filename_key), fallback));
+    sound.volume = (value_as_f64(event.get(volume_key), 100.0) / 100.0) as f32;
+    sound.pitch = (value_as_f64(event.get(pitch_key), 100.0) / 100.0) as f32;
+    sound.offset_ms = value_as_f64(event.get(offset_key), 0.0);
+    sound
+}
+
+fn show_beats_from_pattern(pattern: &str) -> [bool; 6] {
+    let mut output = [true; 6];
+    for (index, ch) in pattern.chars().take(6).enumerate() {
+        output[index] = !matches!(ch, 'x' | 'X');
     }
-    format!("rd:{}", builtin_sound_name(filename))
+    output
+}
+
+fn rd_audio_metadata() -> &'static RdAudioMetadata {
+    RD_AUDIO_METADATA.get_or_init(|| {
+        serde_json::from_str(include_str!(
+            "../../assets/rhythm-doctor-audio-metadata.json"
+        ))
+        .unwrap_or_else(|_| RdAudioMetadata {
+            sound_offsets: HashMap::new(),
+            game_sounds: HashMap::new(),
+        })
+    })
+}
+
+fn sound_offset(sound_name: &str) -> f64 {
+    rd_audio_metadata()
+        .sound_offsets
+        .get(sound_name)
+        .map(|meta| meta.offset_ms / 1000.0)
+        .unwrap_or(0.0)
+}
+
+fn sound_volume(sound_name: &str) -> f32 {
+    rd_audio_metadata()
+        .sound_offsets
+        .get(sound_name)
+        .map(|meta| meta.volume)
+        .unwrap_or(1.0)
+}
+
+fn game_sound_offset(state: &TimelineState, sound_type: &str) -> f64 {
+    state
+        .game_sounds
+        .get(sound_type)
+        .map(|sound| {
+            sound_offset(&builtin_sound_name(&sound.filename)) / sound.pitch.max(0.05) as f64
+        })
+        .unwrap_or(0.0)
+}
+
+fn game_sound_group(sound_type: &str) -> &'static [&'static str] {
+    match sound_type {
+        "ClapSoundHold" => &[
+            "ClapSoundHoldLongEnd",
+            "ClapSoundHoldLongStart",
+            "ClapSoundHoldShortEnd",
+            "ClapSoundHoldShortStart",
+        ],
+        "PulseSoundHold" => &[
+            "PulseSoundHoldStart",
+            "PulseSoundHoldShortEnd",
+            "PulseSoundHoldEnd",
+            "PulseSoundHoldStartAlt",
+            "PulseSoundHoldShortEndAlt",
+            "PulseSoundHoldEndAlt",
+        ],
+        "ClapSoundHoldP2" => &[
+            "ClapSoundHoldLongEndP2",
+            "ClapSoundHoldLongStartP2",
+            "ClapSoundHoldShortEndP2",
+            "ClapSoundHoldShortStartP2",
+        ],
+        "PulseSoundHoldP2" => &[
+            "PulseSoundHoldStartP2",
+            "PulseSoundHoldShortEndP2",
+            "PulseSoundHoldEndP2",
+            "PulseSoundHoldStartAltP2",
+            "PulseSoundHoldShortEndAltP2",
+            "PulseSoundHoldEndAltP2",
+        ],
+        "FreezeshotSound" => &[
+            "FreezeshotSoundCueLow",
+            "FreezeshotSoundCueHigh",
+            "FreezeshotSoundRiser",
+            "FreezeshotSoundCymbal",
+        ],
+        "BurnshotSound" => &[
+            "BurnshotSoundCueLow",
+            "BurnshotSoundCueHigh",
+            "BurnshotSoundRiser",
+            "BurnshotSoundCymbal",
+        ],
+        "HoldshotSound" => &[
+            "HoldshotSoundCue",
+            "HoldshotSoundClapStart",
+            "HoldshotSoundClapShortEnd",
+            "HoldshotSoundClapLongEnd",
+        ],
+        _ => &[],
+    }
 }
 
 fn builtin_sound_name(filename: &str) -> String {
@@ -915,19 +1593,6 @@ fn builtin_sound_name(filename: &str) -> String {
     } else {
         format!("snd{stem}")
     }
-}
-
-fn classic_offset(index: usize, tick: f64, swing: f64, hold: f64) -> f64 {
-    if swing != 0.0 && index % 2 == 1 && hold == 0.0 {
-        tick * (index as f64 + 1.0) - swing
-    } else {
-        tick * index as f64
-    }
-}
-
-fn pattern_skip(pattern: &str, index: usize) -> bool {
-    let chars: Vec<char> = pattern.chars().collect();
-    matches!(chars.get(index % chars.len().max(1)), Some('x') | Some('X'))
 }
 
 fn phrase_words(phrase: &str) -> Vec<&'static str> {
@@ -1026,36 +1691,46 @@ fn ready_voice_prefix(voice: &str, word: &str) -> &'static str {
 
 fn counting_voice_prefix(voice: &str) -> &'static str {
     match voice {
+        "BirdCount" => "sndBird",
+        "CanaryCount" => "sndCanary",
         "IanCount" => "sndIan - Count",
         "IanCountCalm" => "sndIanCalm - Count",
+        "IanCountFast" => "sndIan - ChineseCountFast",
         "IanCountSlow" => "sndIanSlow - Count",
+        "IanCountSlower" => "sndIan - CountSlower",
         "IanCountEnglish" => "sndIan - CountEnglish",
+        "IanCountEnglishFast" => "sndIan - CountEnglish",
         "IanCountEnglishCalm" => "sndIanCalm - CountEnglish",
         "IanCountEnglishSlow" => "sndIanSlow - CountEnglish",
-        "JyiCountEnglish" => "sndJyi - CountEnglish",
         "JyiCount" => "sndJyi - ChineseCount",
+        "JyiCountEnglish" => "sndJyi - CountEnglish",
         "JyiCountCalm" => "sndJyi - ChineseCountCalm",
         "JyiCountFast" => "sndJyi - ChineseCountFast",
+        "JyiCountJapanese" => "sndJyi - JapaneseCount",
+        "JyiCountLegacy" => "sndJyi - ChineseCountLegacy",
+        "JyiCountTired" => "sndJyi - ChineseCountTired",
+        "JyiCountVeryTired" => "sndJyi - ChineseCountVTired",
+        "OrioleCount" => "sndOriole",
+        "OwlCount" => "sndOwl",
+        "ParrotCount" => "sndParrot",
+        "SpearCount" => "sndSpear",
+        "WhistleCount" => "sndWhistle",
+        "WrenCount" => "sndWren",
         _ => "sndJyi - CountEnglish",
     }
 }
 
 fn default_game_sounds() -> BTreeMap<String, SoundRef> {
-    [
-        ("Skipshot", "Vibraslap"),
-        ("HoldshotSoundCue", "HoldshotCue"),
-        ("FreezeshotSoundCueLow", "FreezeshotCueLow"),
-        ("FreezeshotSoundCueHigh", "FreezeshotCueHigh"),
-        ("FreezeshotSoundCymbal", "FreezeshotCymbal"),
-        ("BurnshotSoundCueLow", "BurnshotCueLow"),
-        ("BurnshotSoundCueHigh", "BurnshotCueHigh"),
-        ("BurnshotSoundCymbal", "BurnshotCymbal"),
-        ("SmallMistake", "MistakeSmall3"),
-        ("BigMistake", "MistakeBig"),
-    ]
-    .into_iter()
-    .map(|(key, sound)| (key.to_string(), SoundRef::new(sound)))
-    .collect()
+    rd_audio_metadata()
+        .game_sounds
+        .iter()
+        .map(|(key, data)| {
+            let mut sound = SoundRef::new(&data.filename);
+            sound.volume = data.volume;
+            sound.pitch = data.max_pitch;
+            (key.clone(), sound)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1082,7 +1757,50 @@ mod tests {
         });
         let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
         assert_eq!(timeline.play_sound_events.len(), 1);
-        assert!((timeline.play_sound_events[0].time_sec - 1.0).abs() < 0.001);
+        assert!((timeline.play_sound_events[0].time_sec - 0.985).abs() < 0.001);
         assert_eq!(timeline.play_sound_events[0].sound_name, "rd:sndShaker");
+    }
+
+    #[test]
+    fn classic_hold_uses_official_hold_sounds_per_pulse() {
+        let root = json!({
+            "events": [
+                { "type": "PlaySong", "bar": 1, "beat": 1, "song": { "filename": "music.ogg" }, "bpm": 120 },
+                { "type": "AddClassicBeat", "bar": 1, "beat": 1, "row": 0, "tick": 1, "hold": 1, "length": 7 }
+            ]
+        });
+        let timeline = build_timeline_from_root(&root, Path::new("test.rdlevel"), true).unwrap();
+        assert!(timeline
+            .hold_sound_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndHoldStartTamb"));
+        assert!(timeline
+            .hold_sound_events
+            .iter()
+            .any(|event| event.sound_name == "rd:sndHoldWindupLongStart"));
+    }
+
+    #[test]
+    fn user_rd_sample_levels_build_when_present() {
+        let root = Path::new(r"C:\Users\lizi\Documents\Rhythm Doctor\Levels");
+        if !root.exists() {
+            return;
+        }
+        let mut parsed = 0usize;
+        for entry in walkdir::WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rdlevel"))
+        {
+            let timeline = build_timeline_from_path(entry.path(), true)
+                .unwrap_or_else(|err| panic!("{}: {err}", entry.path().display()));
+            assert!(
+                !timeline.hit_events.is_empty() || !timeline.play_sound_events.is_empty(),
+                "{} produced an empty RD timeline",
+                entry.path().display()
+            );
+            parsed += 1;
+        }
+        assert!(parsed > 0);
     }
 }
