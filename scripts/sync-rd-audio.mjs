@@ -14,6 +14,7 @@ const rdRoot = path.join(publicAudioRoot, "rhythm-doctor");
 const rdResourcesRoot = path.join(rdRoot, "resources");
 const rdSourceRoot = process.env.RD_RESOURCES_ROOT || defaultRdResources;
 const tauriAssetRoot = path.join(projectRoot, "src-tauri", "assets");
+const RD_AUDIO_SOURCE_PREFIXES = ["sfx/"];
 
 const GAME_SOUND_TYPES = {
   0: "ClapSoundP1Classic",
@@ -73,7 +74,7 @@ await writeManifest("rhythmDoctor", rdRoot, rdRoot);
 async function syncRhythmDoctorResources() {
   await rm(rdResourcesRoot, { recursive: true, force: true });
   await mkdir(rdResourcesRoot, { recursive: true });
-  const files = await collectAudioFiles(rdSourceRoot);
+  const files = (await collectAudioFiles(rdSourceRoot)).filter(isRuntimeRhythmDoctorAudio);
   for (const source of files) {
     const relative = path.relative(rdSourceRoot, source);
     const target = path.join(rdResourcesRoot, relative);
@@ -81,6 +82,11 @@ async function syncRhythmDoctorResources() {
     await copyFile(source, target);
   }
   console.log(`已复制 RD 音频 ${files.length} 个`);
+}
+
+function isRuntimeRhythmDoctorAudio(file) {
+  const relative = slash(path.relative(rdSourceRoot, file)).toLowerCase();
+  return RD_AUDIO_SOURCE_PREFIXES.some((prefix) => relative.startsWith(prefix));
 }
 
 async function writeRhythmDoctorMetadata() {
@@ -191,13 +197,7 @@ function manifestPathScore(value) {
   if (value.startsWith("resources/sfx/")) {
     return 0;
   }
-  if (value.startsWith("resources/music/")) {
-    return 1;
-  }
-  if (value.startsWith("resources/internallevels/")) {
-    return 2;
-  }
-  return 3;
+  return 1;
 }
 
 function normalizeAlias(alias) {
